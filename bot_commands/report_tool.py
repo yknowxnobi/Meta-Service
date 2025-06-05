@@ -5,7 +5,7 @@ import time
 from string import ascii_letters, digits
 from faker import Faker
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
+from telegram.ext import CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler, CallbackQueryHandler
 
 # Conversation states
 WAITING_TARGET_USER, WAITING_TARGET_NAME = range(2)
@@ -18,7 +18,7 @@ fake = Faker()
 async def report_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /report command"""
     user_id = update.effective_user.id
-    channel_id = os.getenv('CHANNEL_ID', '@meta_service')
+    channel_id = os.getenv('CHANNEL_ID', '@meta_services')
     
     # Check subscription
     try:
@@ -111,7 +111,7 @@ async def handle_report_callback(update: Update, context: ContextTypes.DEFAULT_T
     
     if query.data == "check_report_sub":
         user_id = query.from_user.id
-        channel_id = os.getenv('CHANNEL_ID', '@meta_service')
+        channel_id = os.getenv('CHANNEL_ID', '@meta_services')
         
         try:
             member = await context.bot.get_chat_member(channel_id, user_id)
@@ -162,3 +162,76 @@ async def start_instagram_reporting(query, context, report_data):
         '❌ Failed: 0\n'
         '🔄 Progress: 0%',
         parse_mode='Markdown'
+    )  # FIXED: Added missing closing parenthesis
+    
+    # Simulate reporting process
+    for i in range(total_attempts):
+        try:
+            # Simulate delay
+            await asyncio.sleep(random.uniform(1, 3))
+            
+            # Random success/fail (for demo)
+            if random.choice([True, False, True]):  # 2/3 success rate
+                successful_reports += 1
+            else:
+                failed_reports += 1
+            
+            # Update progress
+            progress = int(((i + 1) / total_attempts) * 100)
+            
+            try:
+                await status_msg.edit_text(
+                    f'📊 **Report Status:**\n\n'
+                    f'✅ Successful: {successful_reports}\n'
+                    f'❌ Failed: {failed_reports}\n'
+                    f'🔄 Progress: {progress}%',
+                    parse_mode='Markdown'
+                )
+            except:
+                pass  # Ignore edit errors
+                
+        except Exception as e:
+            failed_reports += 1
+    
+    # Final status
+    final_text = f"""
+🏁 **Report Process Complete!**
+
+📊 **Final Results:**
+✅ **Successful Reports:** {successful_reports}
+❌ **Failed Reports:** {failed_reports}
+📈 **Success Rate:** {int((successful_reports/total_attempts)*100)}%
+
+🎯 **Target:** `{target_user}`
+⏰ **Completed:** {time.strftime('%H:%M:%S')}
+
+⚠️ **Note:** This is a demonstration. Actual reporting depends on various factors.
+    """
+    
+    try:
+        await status_msg.edit_text(final_text, parse_mode='Markdown')
+    except:
+        await context.bot.send_message(
+            query.message.chat_id,
+            final_text,
+            parse_mode='Markdown'
+        )
+
+def setup_report_commands(app, admin_id, channel_id):
+    """Setup report-related handlers"""
+    
+    # Conversation handler for report process
+    report_handler = ConversationHandler(
+        entry_points=[CommandHandler('report', report_command)],
+        states={
+            WAITING_TARGET_USER: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_target_username)],
+            WAITING_TARGET_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_target_name)],
+        },
+        fallbacks=[CommandHandler('cancel', lambda u, c: ConversationHandler.END)]
+    )
+    
+    # Add handlers
+    app.add_handler(report_handler)
+    app.add_handler(CallbackQueryHandler(handle_report_callback))
+    
+    print("✅ Report commands setup complete!")
