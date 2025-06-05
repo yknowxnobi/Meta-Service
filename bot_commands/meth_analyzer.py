@@ -22,7 +22,7 @@ async def check_subscription(user_id, context, channel_id):
 async def meth_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /meth command"""
     user_id = update.effective_user.id
-    channel_id = os.getenv('CHANNEL_ID', '@meta_service')
+    channel_id = os.getenv('CHANNEL_ID', '@meta_services')
     
     # Check subscription
     if not await check_subscription(user_id, context, channel_id):
@@ -143,7 +143,7 @@ async def handle_meth_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     
     if query.data == "check_fsub":
         user_id = query.from_user.id
-        channel_id = os.getenv('CHANNEL_ID', '@meta_service')
+        channel_id = os.getenv('CHANNEL_ID', '@meta_services')
         
         if await check_subscription(user_id, context, channel_id):
             await query.edit_message_text(
