@@ -1,10 +1,13 @@
 import os
 import requests
-from telegram import Update
-from telegram.ext import CommandHandler, MessageHandler, filters, ContextTypes
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler, CallbackQueryHandler
+
+# Conversation states
+WAITING_RESET_INPUT = range(1)
 
 # Global variables for reset requests
-reset_requests = {}
+reset_states = {}
 
 async def insta_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /insta command for user details"""
@@ -78,7 +81,6 @@ async def insta_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /reset command for password reset"""
     user_id = update.effective_user.id
-    reset_requests[user_id] = True
     
     await update.message.reply_text(
         '🔄 **Password Reset Mode Activated**\n\n'
@@ -86,13 +88,16 @@ async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         '**Note:** This will send a reset link to the associated email.',
         parse_mode='Markdown'
     )
+    
+    reset_states[user_id] = True
+    return WAITING_RESET_INPUT
 
-async def handle_reset_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle text messages for reset requests"""
+async def handle_reset_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle text input for reset requests"""
     user_id = update.effective_user.id
     
-    if user_id not in reset_requests:
-        return
+    if user_id not in reset_states:
+        return ConversationHandler.END
     
     email_or_username = update.message.text.strip()
     
@@ -130,13 +135,27 @@ async def handle_reset_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await processing_msg.edit_text(f'🚨 **Error:** {str(e)}', parse_mode='Markdown')
     
-    # Remove user from reset requests
-    del reset_requests[user_id]
+    # Clean up
+    if user_id in reset_states:
+        del reset_states[user_id]
+    
+    return ConversationHandler.END
 
 def setup_insta_commands(app, admin_id, channel_id):
     """Setup Instagram info commands"""
+    
+    # Basic insta command
     app.add_handler(CommandHandler("insta", insta_command))
-    app.add_handler(CommandHandler("reset", reset_command))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_reset_text))
+    
+    # Reset conversation handler
+    reset_handler = ConversationHandler(
+        entry_points=[CommandHandler('reset', reset_command)],
+        states={
+            WAITING_RESET_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_reset_input)],
+        },
+        fallbacks=[CommandHandler('cancel', lambda u, c: ConversationHandler.END)]
+    )
+    
+    app.add_handler(reset_handler)
     
     print("✅ Instagram info commands loaded")
