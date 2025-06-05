@@ -127,7 +127,7 @@ class TelegramBot:
             reply_markup={
                 'inline_keyboard': [
                     [{'text': '📢 Updates', 'url': f'https://t.me/{self.channel_id.replace("@", "")}'}],
-                    [{'text': '💬 Support', 'url': 'https://t.me/offchats'}]
+                    [{'text': '💬 Support', 'url': 'https://t.me/nobi_shops'}]
                 ]
             }
         )
