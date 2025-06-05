@@ -42,7 +42,7 @@ class TelegramBot:
     def __init__(self):
         self.token = os.getenv('BOT_TOKEN')
         self.admin_id = int(os.getenv('ADMIN_ID', '0'))
-        self.channel_id = os.getenv('CHANNEL_ID', '@meta_service')
+        self.channel_id = os.getenv('CHANNEL_ID', '@meta_server')
         
         if not self.token:
             print("❌ BOT_TOKEN not found in environment variables!")
