@@ -18,7 +18,7 @@ fake = Faker()
 async def report_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /report command"""
     user_id = update.effective_user.id
-    channel_id = os.getenv('CHANNEL_ID', '@meta_services')
+    channel_id = os.getenv('CHANNEL_ID', '@meta_servers')
     
     # Check subscription
     try:
@@ -111,7 +111,7 @@ async def handle_report_callback(update: Update, context: ContextTypes.DEFAULT_T
     
     if query.data == "check_report_sub":
         user_id = query.from_user.id
-        channel_id = os.getenv('CHANNEL_ID', '@meta_services')
+        channel_id = os.getenv('CHANNEL_ID', '@meta_servers')
         
         try:
             member = await context.bot.get_chat_member(channel_id, user_id)
