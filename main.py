@@ -6,11 +6,35 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# Import all modules
-from bot_commands.insta_info import setup_insta_commands
-from bot_commands.meth_analyzer import setup_meth_commands
-from bot_commands.report_tool import setup_report_commands
-from bot_commands.session_manager import setup_session_commands
+# Import modules with error handling
+try:
+    from bot_commands.insta_info import setup_insta_commands
+    print("✅ insta_info imported successfully")
+except Exception as e:
+    print(f"❌ Error importing insta_info: {e}")
+    setup_insta_commands = None
+
+try:
+    from bot_commands.meth_analyzer import setup_meth_commands
+    print("✅ meth_analyzer imported successfully")
+except Exception as e:
+    print(f"❌ Error importing meth_analyzer: {e}")
+    setup_meth_commands = None
+
+try:
+    from bot_commands.report_tool import setup_report_commands
+    print("✅ report_tool imported successfully")
+except Exception as e:
+    print(f"❌ Error importing report_tool: {e}")
+    setup_report_commands = None
+
+try:
+    from bot_commands.session_manager import setup_session_commands
+    print("✅ session_manager imported successfully")
+except Exception as e:
+    print(f"❌ Error importing session_manager: {e}")
+    setup_session_commands = None
+
 from telegram import Update, Bot
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 
@@ -33,11 +57,34 @@ class TelegramBot:
         self.app.add_handler(CommandHandler("start", self.start_command))
         self.app.add_handler(CommandHandler("help", self.help_command))
         
-        # Setup feature-specific handlers
-        setup_insta_commands(self.app, self.admin_id, self.channel_id)
-        setup_meth_commands(self.app, self.admin_id, self.channel_id)
-        setup_report_commands(self.app, self.admin_id, self.channel_id)
-        setup_session_commands(self.app, self.admin_id, self.channel_id)
+        # Setup feature-specific handlers with error handling
+        if setup_insta_commands:
+            try:
+                setup_insta_commands(self.app, self.admin_id, self.channel_id)
+                print("✅ Instagram commands setup complete!")
+            except Exception as e:
+                print(f"❌ Error setting up Instagram commands: {e}")
+        
+        if setup_meth_commands:
+            try:
+                setup_meth_commands(self.app, self.admin_id, self.channel_id)
+                print("✅ Meth commands setup complete!")
+            except Exception as e:
+                print(f"❌ Error setting up Meth commands: {e}")
+        
+        if setup_report_commands:
+            try:
+                setup_report_commands(self.app, self.admin_id, self.channel_id)
+                print("✅ Report commands setup complete!")
+            except Exception as e:
+                print(f"❌ Error setting up Report commands: {e}")
+        
+        if setup_session_commands:
+            try:
+                setup_session_commands(self.app, self.admin_id, self.channel_id)
+                print("✅ Session commands setup complete!")
+            except Exception as e:
+                print(f"❌ Error setting up Session commands: {e}")
         
         print("✅ All handlers setup complete!")
     
@@ -128,5 +175,9 @@ class TelegramBot:
         self.app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
-    bot = TelegramBot()
-    bot.run()
+    try:
+        bot = TelegramBot()
+        bot.run()
+    except Exception as e:
+        print(f"❌ Critical error: {e}")
+        sys.exit(1)
