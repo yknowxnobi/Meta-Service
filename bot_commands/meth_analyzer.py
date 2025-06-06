@@ -14,18 +14,36 @@ user_states = {}
 async def check_subscription(user_id, context, channel_id):
     """Check if user is subscribed to the channel"""
     try:
+        print(f"DEBUG: Checking subscription for user {user_id} in channel {channel_id}")
         member = await context.bot.get_chat_member(channel_id, user_id)
-        return member.status not in ['left', 'kicked']
-    except:
-        return False
+        print(f"DEBUG: Member status: {member.status}")
+        
+        # Check if user is subscribed (not left or kicked)
+        is_subscribed = member.status not in ['left', 'kicked']
+        print(f"DEBUG: Is subscribed: {is_subscribed}")
+        return is_subscribed
+        
+    except Exception as e:
+        print(f"DEBUG: Error checking subscription: {e}")
+        # Return False only for specific errors, True for others to avoid blocking
+        error_str = str(e).lower()
+        if "chat not found" in error_str or "forbidden" in error_str:
+            return False
+        # For other errors (like network issues), assume user is subscribed
+        return True
 
 async def meth_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /meth command"""
     user_id = update.effective_user.id
     channel_id = os.getenv('CHANNEL_ID', '@meta_servers')
     
+    print(f"DEBUG: Meth command called by user {user_id}")
+    
     # Check subscription
-    if not await check_subscription(user_id, context, channel_id):
+    is_subscribed = await check_subscription(user_id, context, channel_id)
+    print(f"DEBUG: Subscription check result: {is_subscribed}")
+    
+    if not is_subscribed:
         keyboard = [
             [InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{channel_id.replace('@', '')}")],
             [InlineKeyboardButton("✅ I Joined", callback_data="check_fsub")]
@@ -141,11 +159,18 @@ async def handle_meth_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     query = update.callback_query
     await query.answer()
     
+    print(f"DEBUG: Callback received: {query.data}")
+    
     if query.data == "check_fsub":
         user_id = query.from_user.id
         channel_id = os.getenv('CHANNEL_ID', '@meta_servers')
         
-        if await check_subscription(user_id, context, channel_id):
+        print(f"DEBUG: Checking subscription for callback user {user_id}")
+        
+        is_subscribed = await check_subscription(user_id, context, channel_id)
+        print(f"DEBUG: Callback subscription result: {is_subscribed}")
+        
+        if is_subscribed:
             await query.edit_message_text(
                 '✅ **Subscription verified!**\n\nNow use /meth to proceed.',
                 parse_mode='Markdown'
@@ -175,7 +200,10 @@ async def process_meth_analysis(query, context, username):
     await asyncio.sleep(1)
     
     # Delete confirmation and show loading
-    await context.bot.delete_message(query.message.chat_id, query.message.message_id)
+    try:
+        await context.bot.delete_message(query.message.chat_id, query.message.message_id)
+    except:
+        pass  # Ignore if message can't be deleted
     
     loading_msg = await context.bot.send_message(
         query.message.chat_id,
