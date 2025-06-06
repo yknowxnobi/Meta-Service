@@ -1,5 +1,6 @@
 import os
 import requests
+import time
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler, CallbackQueryHandler
 
@@ -38,19 +39,36 @@ async def insta_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         data = response.json()
         user_id = data.get('id2', 'N/A')
         
-        # Fetch account creation year
+        # Fetch account creation year - Fixed the logic
         creation_year = 'N/A'
-        try:
-            gojo_url = os.getenv('GOJOAPI_URL', 'https://gojoapi.pythonanywhere.com')
-            creation_response = requests.get(
-                f"{gojo_url}/get-year",
-                params={'Id': user_id},
-                timeout=5
-            )
-            if creation_response.status_code == 200:
-                creation_year = creation_response.json().get('year', 'N/A')
-        except:
-            creation_year = 'Could not fetch'
+        if user_id != 'N/A':
+            try:
+                gojo_url = os.getenv('GOJOAPI_URL', 'https://gojoapi.pythonanywhere.com')
+                creation_response = requests.get(
+                    f"{gojo_url}/get-year",
+                    params={'Id': user_id},
+                    timeout=10
+                )
+                if creation_response.status_code == 200:
+                    creation_data = creation_response.json()
+                    creation_year = creation_data.get('year', 'N/A')
+                    if creation_year == 'N/A' or creation_year is None:
+                        creation_year = 'Could not fetch'
+                else:
+                    creation_year = 'Could not fetch'
+            except Exception as e:
+                print(f"Error fetching creation year: {e}")
+                creation_year = 'Could not fetch'
+        
+        # Format followers, following, posts with commas
+        followers = data.get('followers', 0)
+        following = data.get('following', 0)
+        posts = data.get('posts', 0)
+        
+        # Format numbers with commas
+        followers_formatted = f"{followers:,}" if isinstance(followers, int) else str(followers)
+        following_formatted = f"{following:,}" if isinstance(following, int) else str(following)
+        posts_formatted = f"{posts:,}" if isinstance(posts, int) else str(posts)
         
         # Format message
         message = f"""
@@ -61,9 +79,9 @@ async def insta_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 📛 **Name:** {data.get('nickname', 'N/A')}
 🆔 **ID:** {user_id}
 🔒 **Private:** {'Yes' if data.get('private') else 'No'}
-👥 **Followers:** {data.get('followers', 'N/A'):,} 
-🔄 **Following:** {data.get('following', 'N/A'):,}
-📸 **Posts:** {data.get('posts', 'N/A'):,}
+👥 **Followers:** {followers_formatted}
+🔄 **Following:** {following_formatted}
+📸 **Posts:** {posts_formatted}
 📅 **Created In:** {creation_year}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -108,6 +126,9 @@ async def handle_reset_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
     )
     
     try:
+        # Record start time
+        start_time = time.time()
+        
         # Send reset request
         recovery_url = os.getenv('IG_RECOVERY_URL', 'https://www.instagram.com/api/v1/web/accounts/account_recovery_send_ajax/')
         
@@ -121,19 +142,72 @@ async def handle_reset_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
         
         response = requests.post(recovery_url, data=payload, headers=headers, timeout=10)
         
-        # Format response
-        result_text = f"""
-📬 **Reset Request Result:**
+        # Calculate time taken
+        end_time = time.time()
+        time_taken = round(end_time - start_time, 2)
+        
+        # Get user's display name
+        user_name = update.effective_user.first_name or update.effective_user.username or "Unknown User"
+        
+        # Parse response to extract email if available
+        associated_email = "Not Available"
+        try:
+            if response.status_code == 200:
+                response_data = response.json()
+                # Try to extract email from response (this depends on Instagram's response format)
+                if 'email' in response_data:
+                    email = response_data['email']
+                    # Mask email like w*******u@gmail.com
+                    if '@' in email:
+                        local, domain = email.split('@', 1)
+                        if len(local) > 2:
+                            masked_local = local[0] + '*' * (len(local) - 2) + local[-1]
+                            associated_email = f"{masked_local}@{domain}"
+                        else:
+                            associated_email = f"**@{domain}"
+                    else:
+                        associated_email = email
+        except:
+            pass
+        
+        # Format response in the requested style
+        if response.status_code == 200:
+            result_text = f"""
+•𝗣𝗮𝘀𝘀𝘄𝗼𝗿𝗱 𝗥𝗲𝘀𝗲𝘁 𝗟𝗶𝗻𝗸 𝗦𝗲𝗻𝘁 𝗦𝘂𝗰𝗰𝗲𝘀𝘀𝗳𝘂𝗹𝗹𝘆!
 
-**Target:** `{email_or_username}`
-**Status:** {"✅ Sent" if response.status_code == 200 else "❌ Failed"}
-**Response:** `{response.text[:200]}...`
-        """
+≭ 𝗘𝗺𝗮𝗶𝗹 𝗔𝘀𝘀𝗼𝗰𝗶𝗮𝘁𝗲𝗱: `{associated_email}`
+≭ 𝗥𝗲𝗾𝘂𝗲𝘀𝘁𝗲𝗱 𝗕𝘆: `{user_name}`
+≭ 𝗕𝗼𝘁 𝗕𝘆 / 𝗗𝗲𝘃: @meta_server
+≭ 𝗧𝗶𝗺𝗲 𝗧𝗮𝗸𝗲𝗻: `{time_taken}` 𝘀𝗲𝗰𝗼𝗻𝗱𝘀
+            """
+        else:
+            result_text = f"""
+•𝗣𝗮𝘀𝘀𝘄𝗼𝗿𝗱 𝗥𝗲𝘀𝗲𝘁 𝗙𝗮𝗶𝗹𝗲𝗱!
+
+≭ 𝗧𝗮𝗿𝗴𝗲𝘁: `{email_or_username}`
+≭ 𝗥𝗲𝗾𝘂𝗲𝘀𝘁𝗲𝗱 𝗕𝘆: `{user_name}`
+≭ 𝗕𝗼𝘁 𝗕𝘆 / 𝗗𝗲𝘃: @meta_server
+≭ 𝗧𝗶𝗺𝗲 𝗧𝗮𝗸𝗲𝗻: `{time_taken}` 𝘀𝗲𝗰𝗼𝗻𝗱𝘀
+≭ 𝗘𝗿𝗿𝗼𝗿: `{response.status_code}`
+            """
         
         await processing_msg.edit_text(result_text, parse_mode='Markdown')
         
     except Exception as e:
-        await processing_msg.edit_text(f'🚨 **Error:** {str(e)}', parse_mode='Markdown')
+        end_time = time.time()
+        time_taken = round(end_time - start_time, 2)
+        
+        error_text = f"""
+•𝗣𝗮𝘀𝘀𝘄𝗼𝗿𝗱 𝗥𝗲𝘀𝗲𝘁 𝗙𝗮𝗶𝗹𝗲𝗱!
+
+≭ 𝗧𝗮𝗿𝗴𝗲𝘁: `{email_or_username}`
+≭ 𝗥𝗲𝗾𝘂𝗲𝘀𝘁𝗲𝗱 𝗕𝘆: `{user_name}`
+≭ 𝗕𝗼𝘁 𝗕𝘆 / 𝗗𝗲𝘃: @meta_server
+≭ 𝗧𝗶𝗺𝗲 𝗧𝗮𝗸𝗲𝗻: `{time_taken}` 𝘀𝗲𝗰𝗼𝗻𝗱𝘀
+≭ 𝗘𝗿𝗿𝗼𝗿: `{str(e)}`
+        """
+        
+        await processing_msg.edit_text(error_text, parse_mode='Markdown')
     
     # Clean up
     if user_id in reset_states:
