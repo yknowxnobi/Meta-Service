@@ -38,58 +38,83 @@ async def insta_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         data = response.json()
         
-        # Debug: Print the API response to see what we're getting
-        print(f"API Response: {data}")
+        # Map the response to match your desired format
+        formatted_data = {
+            "account_created": data.get('account_created', 'N/A'),
+            "avatar": data.get('avatar', data.get('userBanner', 'N/A')),
+            "biography": data.get('biography', 'N/A'),
+            "followers": data.get('followers', 0),
+            "following": data.get('following', 0),
+            "id": data.get('id', data.get('username', 'N/A')),
+            "id2": data.get('id2', 'N/A'),
+            "meta_status": str(data.get('meta_status', 'False')),
+            "nickname": data.get('nickname', 'N/A'),
+            "posts": data.get('posts', 0),
+            "private": data.get('private', False),
+            "success": True,
+            "userBanner": data.get('userBanner', data.get('avatar', 'N/A')),
+            "username": data.get('username', 'N/A'),
+            "verified": data.get('verified', False)
+        }
         
-        # Extract data from API response
-        user_id = data.get('id2', 'N/A')
-        username_display = data.get('username', 'N/A')
-        nickname = data.get('nickname', 'N/A')
-        followers = data.get('followers', 0)
-        following = data.get('following', 0)
-        posts = data.get('posts', 0)
-        private_status = data.get('private', False)
-        verified_status = data.get('verified', False)
-        account_created = data.get('account_created', 'N/A')
+        # If account_created is not available, try to fetch it using the second API
+        if formatted_data["account_created"] == 'N/A' and formatted_data["id2"] != 'N/A':
+            try:
+                gojo_url = os.getenv('GOJOAPI_URL', 'https://gojoapi.pythonanywhere.com')
+                creation_response = requests.get(
+                    f"{gojo_url}/get-year",
+                    params={'Id': formatted_data["id2"]},
+                    timeout=10
+                )
+                if creation_response.status_code == 200:
+                    creation_data = creation_response.json()
+                    year = creation_data.get('year', 'N/A')
+                    if year != 'N/A' and year is not None:
+                        formatted_data["account_created"] = year
+                    else:
+                        formatted_data["account_created"] = 'Could not fetch'
+                else:
+                    formatted_data["account_created"] = 'Could not fetch'
+            except Exception as e:
+                print(f"Error fetching creation year: {e}")
+                formatted_data["account_created"] = 'Could not fetch'
         
-        # Format numbers with commas
-        followers_formatted = f"{followers:,}" if isinstance(followers, int) else str(followers)
-        following_formatted = f"{following:,}" if isinstance(following, int) else str(following)
-        posts_formatted = f"{posts:,}" if isinstance(posts, int) else str(posts)
+        # Format followers, following, posts with commas for display
+        followers_formatted = f"{formatted_data['followers']:,}" if isinstance(formatted_data['followers'], int) else str(formatted_data['followers'])
+        following_formatted = f"{formatted_data['following']:,}" if isinstance(formatted_data['following'], int) else str(formatted_data['following'])
+        posts_formatted = f"{formatted_data['posts']:,}" if isinstance(formatted_data['posts'], int) else str(formatted_data['posts'])
         
-        # Format private status
-        private_text = "Yes" if private_status else "No"
-        
-        # Format verification status
-        verified_text = "✅ Verified" if verified_status else "❌ Not Verified"
-        
-        # Format creation year
-        creation_year = str(account_created) if account_created != 'N/A' and account_created is not None else 'N/A'
-        
-        # Create the formatted message exactly like web response
-        message = f"""🔍 **Instagram User Details**
+        # Create display message
+        message = f"""
+🔍 **Instagram User Details**
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 
-👤 **User:** `{username_display}`
-📛 **Name:** `{nickname}`
-🆔 **ID:** `{user_id}`
-{verified_text}
-🔒 **Private:** `{private_text}`
-👥 **Followers:** `{followers_formatted}`
-🔄 **Following:** `{following_formatted}`
-📸 **Posts:** `{posts_formatted}`
-📅 **Created In:** `{creation_year}`
+👤 **User:** {formatted_data['username']}
+📛 **Name:** {formatted_data['nickname']}
+🆔 **ID:** {formatted_data['id']}
+🔢 **Numeric ID:** {formatted_data['id2']}
+🔒 **Private:** {'Yes' if formatted_data['private'] else 'No'}
+✅ **Verified:** {'Yes' if formatted_data['verified'] else 'No'}
+👥 **Followers:** {followers_formatted}
+🔄 **Following:** {following_formatted}
+📸 **Posts:** {posts_formatted}
+📅 **Created In:** {formatted_data['account_created']}
+📝 **Bio:** {formatted_data['biography'][:100]}{'...' if len(str(formatted_data['biography'])) > 100 else ''}
+🔗 **Meta Status:** {formatted_data['meta_status']}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━"""
+━━━━━━━━━━━━━━━━━━━━━━━━━
+        """
         
         await loading_msg.edit_text(message, parse_mode='Markdown')
+        
+        # Optional: Print the full formatted data for debugging
+        print("Formatted Instagram data:", formatted_data)
         
     except requests.exceptions.Timeout:
         await update.message.reply_text('⏱️ Request timeout. Please try again.')
     except requests.exceptions.RequestException:
         await update.message.reply_text('🚨 Network error occurred. Please try again.')
     except Exception as e:
-        print(f"Error in insta_command: {e}")
         await update.message.reply_text(f'🚨 An error occurred: {str(e)}')
 
 async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
