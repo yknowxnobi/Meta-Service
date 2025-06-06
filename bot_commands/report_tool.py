@@ -2,7 +2,7 @@ import os
 import requests
 import random
 import time
-import asyncio  # ADDED: Missing import
+import asyncio
 from string import ascii_letters, digits
 from faker import Faker
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -19,57 +19,8 @@ fake = Faker()
 async def report_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /report command"""
     user_id = update.effective_user.id
-    channel_id = os.getenv('CHANNEL_ID', '@meta_server')
     
-    print(f"DEBUG: User ID: {user_id}, Channel ID: {channel_id}")  # DEBUG
-    
-    # Check subscription
-    try:
-        member = await context.bot.get_chat_member(channel_id, user_id)
-        print(f"DEBUG: Member status: {member.status}")  # DEBUG
-        
-        if member.status in ['left', 'kicked']:
-            keyboard = [
-                [InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{channel_id.replace('@', '')}")],
-                [InlineKeyboardButton("✅ I Joined", callback_data="check_report_sub")]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            await update.message.reply_text(
-                "⚠️ **Please join our channel first to use this feature.**",
-                parse_mode='Markdown',
-                reply_markup=reply_markup
-            )
-            return ConversationHandler.END
-            
-    except Exception as e:
-        print(f"DEBUG: Exception in subscription check: {e}")  # DEBUG
-        
-        # More specific error handling
-        if "chat not found" in str(e).lower():
-            await update.message.reply_text(
-                '❌ **Channel not found. Please contact admin.**',
-                parse_mode='Markdown'
-            )
-        elif "bot was blocked" in str(e).lower():
-            await update.message.reply_text(
-                '❌ **Please unblock the bot and try again.**',
-                parse_mode='Markdown'
-            )
-        elif "forbidden" in str(e).lower():
-            await update.message.reply_text(
-                '❌ **Bot lacks permission to check membership. Contact admin.**',
-                parse_mode='Markdown'
-            )
-        else:
-            await update.message.reply_text(
-                f'❌ **Unable to verify subscription: {str(e)}**\n\n'
-                f'Please try again or contact admin.',
-                parse_mode='Markdown'
-            )
-        return ConversationHandler.END
-    
-    # Request target username
+    # Request target username directly (no subscription check)
     await update.message.reply_text(
         '📊 **Instagram Report Tool**\n\n'
         '👤 Please enter the target Instagram username (without @):\n\n'
@@ -134,24 +85,6 @@ async def handle_report_callback(update: Update, context: ContextTypes.DEFAULT_T
     """Handle callback queries for report feature"""
     query = update.callback_query
     await query.answer()
-    
-    if query.data == "check_report_sub":
-        user_id = query.from_user.id
-        channel_id = os.getenv('CHANNEL_ID', '@meta_server')
-        
-        try:
-            member = await context.bot.get_chat_member(channel_id, user_id)
-            if member.status not in ['left', 'kicked']:
-                await query.edit_message_text(
-                    '✅ **Subscription verified!**\n\nNow use /report to proceed.',
-                    parse_mode='Markdown'
-                )
-            else:
-                await query.answer('❌ You still need to join the channel.', show_alert=True)
-        except Exception as e:
-            print(f"DEBUG: Callback subscription check error: {e}")  # DEBUG
-            await query.answer(f'❌ Error checking subscription: {str(e)}', show_alert=True)
-        return
     
     if query.data.startswith('start_report_'):
         user_id = int(query.data.replace('start_report_', ''))
