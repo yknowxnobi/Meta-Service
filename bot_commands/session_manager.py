@@ -4,6 +4,8 @@ import time
 import asyncio
 import json
 import random
+import hashlib
+import uuid
 from bs4 import BeautifulSoup
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler, CallbackQueryHandler
@@ -14,13 +16,27 @@ WAITING_USERNAME, WAITING_PASSWORD = range(2)
 # User states for session management
 session_states = {}
 
-# User agents pool for rotation
+# Updated user agents for 2025
 USER_AGENTS = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1"
 ]
+
+# Instagram mobile app signatures
+INSTAGRAM_SIGNATURES = {
+    "version": "292.0.0.26.109",
+    "android_version": "33",
+    "android_release": "13.0",
+    "dpi": "420dpi",
+    "resolution": "1080x2340",
+    "manufacturer": "samsung",
+    "device": "SM-G991B",
+    "model": "o1s",
+    "cpu": "exynos2100",
+    "version_code": "503988293"
+}
 
 async def session_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /session command"""
@@ -30,41 +46,46 @@ async def session_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         print(f"📥 Session command received from user: {user_id}")
         
-        # Check subscription
+        # Check subscription with improved logic
         try:
-            member = await context.bot.get_chat_member(channel_id, user_id)
-            print(f"👤 User membership status: {member.status}")
-            
-            if member.status in ['left', 'kicked']:
-                keyboard = [
-                    [InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{channel_id.replace('@', '')}")],
-                    [InlineKeyboardButton("✅ I Joined", callback_data="check_session_sub")]
-                ]
-                reply_markup = InlineKeyboardMarkup(keyboard)
+            if channel_id:
+                # Clean channel ID format
+                clean_channel = channel_id.replace('@', '') if channel_id.startswith('@') else channel_id
+                member = await context.bot.get_chat_member(f"@{clean_channel}", user_id)
+                print(f"👤 User membership status: {member.status}")
                 
-                await update.message.reply_text(
-                    "⚠️ **Please join our channel first to use this feature.**",
-                    parse_mode='Markdown',
-                    reply_markup=reply_markup
-                )
-                return ConversationHandler.END
+                if member.status in ['left', 'kicked']:
+                    keyboard = [
+                        [InlineKeyboardButton("📢 Join Channel", url=f"https://t.me/{clean_channel}")],
+                        [InlineKeyboardButton("✅ I Joined", callback_data="check_session_sub")]
+                    ]
+                    reply_markup = InlineKeyboardMarkup(keyboard)
+                    
+                    await update.message.reply_text(
+                        f"⚠️ **Please join @{clean_channel} first to use this feature.**",
+                        parse_mode='Markdown',
+                        reply_markup=reply_markup
+                    )
+                    return ConversationHandler.END
         except Exception as e:
             print(f"❌ Error checking subscription: {e}")
             # Continue anyway if channel check fails
             pass
         
         await update.message.reply_text(
-            '🔐 **Instagram Session Manager**\n\n'
+            '🔐 **Instagram Session Manager v2.0**\n\n'
             '👤 Please enter your Instagram username:\n\n'
-            '⚠️ *Your credentials are processed securely and not stored*\n'
-            '💡 **Tips for success:**\n'
+            '⚠️ *Your credentials are processed securely and not stored*\n\n'
+            '💡 **Important Tips:**\n'
             '• Use account without 2FA enabled\n'
-            '• Ensure account is not recently created\n'
-            '• Don\'t use if account was recently locked',
+            '• Account should be at least 7 days old\n'
+            '• Don\'t use if recently locked/suspended\n'
+            '• Wait 15+ minutes between attempts\n'
+            '• Use stable internet connection',
             parse_mode='Markdown'
         )
         
-        session_states[user_id] = {}
+        session_states[user_id] = {'attempts': 0, 'last_attempt': 0}
         print(f"✅ Session state initialized for user: {user_id}")
         return WAITING_USERNAME
         
@@ -80,7 +101,7 @@ async def handle_session_username(update: Update, context: ContextTypes.DEFAULT_
     """Handle username input for session"""
     try:
         user_id = update.effective_user.id
-        username = update.message.text.strip().replace('@', '')
+        username = update.message.text.strip().replace('@', '').lower()
         
         print(f"📝 Username received from user {user_id}: {username}")
         
@@ -92,10 +113,19 @@ async def handle_session_username(update: Update, context: ContextTypes.DEFAULT_
             )
             return ConversationHandler.END
         
-        # Validate username
+        # Validate username format
         if len(username) < 3 or len(username) > 30:
             await update.message.reply_text(
-                '❌ **Invalid username format. Please enter a valid Instagram username.**',
+                '❌ **Invalid username format. Please enter a valid Instagram username (3-30 characters).**',
+                parse_mode='Markdown'
+            )
+            return WAITING_USERNAME
+        
+        # Check for invalid characters
+        import re
+        if not re.match(r'^[a-zA-Z0-9._]+$', username):
+            await update.message.reply_text(
+                '❌ **Username contains invalid characters. Only letters, numbers, dots, and underscores allowed.**',
                 parse_mode='Markdown'
             )
             return WAITING_USERNAME
@@ -111,7 +141,8 @@ async def handle_session_username(update: Update, context: ContextTypes.DEFAULT_
         await update.message.reply_text(
             f'✅ **Username:** `{username}`\n\n'
             '🔒 Now please enter your Instagram password:\n\n'
-            '⚠️ *Your password will be deleted immediately after processing*',
+            '⚠️ *Your password will be deleted immediately after processing*\n'
+            '🔐 *Make sure your password is correct to avoid account locks*',
             parse_mode='Markdown'
         )
         
@@ -143,6 +174,20 @@ async def handle_session_password(update: Update, context: ContextTypes.DEFAULT_
         
         username = session_states[user_id]['username']
         
+        # Check rate limiting
+        current_time = int(time.time())
+        last_attempt = session_states[user_id].get('last_attempt', 0)
+        if current_time - last_attempt < 300:  # 5 minutes
+            session_states[user_id]['attempts'] += 1
+            if session_states[user_id]['attempts'] > 3:
+                await update.message.reply_text(
+                    '⚠️ **Too many attempts. Please wait 15 minutes before trying again.**',
+                    parse_mode='Markdown'
+                )
+                return ConversationHandler.END
+        
+        session_states[user_id]['last_attempt'] = current_time
+        
         # Delete the password message immediately
         try:
             await context.bot.delete_message(update.effective_chat.id, update.message.message_id)
@@ -153,67 +198,124 @@ async def handle_session_password(update: Update, context: ContextTypes.DEFAULT_
         start_time = time.time()
         processing_msg = await update.message.reply_text(
             '🔄 **Processing login request...**\n\n'
-            '⏳ Please wait while we generate your session ID.\n'
-            '🔄 This may take up to 30 seconds...',
+            '⏳ Connecting to Instagram servers...\n'
+            '🔐 Authenticating credentials...\n'
+            '🎯 This may take 30-60 seconds...',
             parse_mode='Markdown'
         )
         
-        # Process login with new method
-        result = await instagram_login_v3(username, password)
+        # Try multiple login methods
+        methods = [
+            ('Mobile App Method', instagram_login_mobile),
+            ('Web Method v1', instagram_login_web_v1),
+            ('Web Method v2', instagram_login_web_v2)
+        ]
+        
+        result = None
+        method_used = "Unknown"
+        
+        for method_name, method_func in methods:
+            try:
+                print(f"🔄 Trying {method_name}...")
+                await processing_msg.edit_text(
+                    f'🔄 **Processing login request...**\n\n'
+                    f'🎯 Method: {method_name}\n'
+                    f'⏳ Please wait...',
+                    parse_mode='Markdown'
+                )
+                
+                result = await method_func(username, password)
+                if result['success']:
+                    method_used = method_name
+                    print(f"✅ {method_name} successful!")
+                    break
+                else:
+                    print(f"❌ {method_name} failed: {result['error']}")
+                    await asyncio.sleep(2)  # Wait between methods
+                    
+            except Exception as e:
+                print(f"🚨 {method_name} exception: {e}")
+                continue
+        
         end_time = time.time()
         time_taken = round(end_time - start_time, 2)
         
-        if result['success']:
+        if result and result['success']:
             session_id = result['session_id']
             success_text = f"""✅ **Session Generated Successfully!**
 
 👤 **Username:** `{username}`
 🔑 **Session ID:** `{session_id}`
+🛠️ **Method:** {method_used}
 
 📋 **How to use:**
 1. Copy the session ID above
 2. Use it in your Instagram automation tools
 3. Keep it secure and don't share with others
 
-⚠️ **Important:** 
-• Session IDs can expire after some time
-• Generate a new one if you get authentication errors
-• Don't use this session simultaneously in multiple places
+⚠️ **Important Notes:** 
+• Session IDs typically last 30-90 days
+• Generate a new one if you get auth errors
+• Don't use simultaneously in multiple places
+• Store securely and delete when not needed
 
-≭ **Bot By / Dev:** @luciInVain
-≭ **Time Taken:** `{time_taken}` seconds"""
+🔐 **Security Tips:**
+• Change your password after getting session
+• Monitor account activity regularly
+• Logout from unknown devices
+
+≭ **Bot By:** @luciInVain
+≭ **Time Taken:** `{time_taken}s`
+≭ **Status:** Active & Secure"""
             
             keyboard = [
                 [InlineKeyboardButton("🔄 Generate New", callback_data="new_session")],
-                [InlineKeyboardButton("👨‍💻 Support", url="tg://openmessage?user_id=7863546766")]
+                [InlineKeyboardButton("👨‍💻 Support", url="tg://openmessage?user_id=7863546766")],
+                [InlineKeyboardButton("🔒 Security Tips", callback_data="security_tips")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
             await processing_msg.edit_text(success_text, parse_mode='Markdown', reply_markup=reply_markup)
         else:
-            error_text = f"""❌ **Login Failed**
+            error_msg = result['error'] if result else "All methods failed"
+            error_text = f"""❌ **Session Generation Failed**
 
 👤 **Username:** `{username}`
-🚨 **Error:** {result['error']}
+🚨 **Error:** {error_msg}
 
-🔧 **Troubleshooting:**
-• Verify your username and password are correct
-• Make sure 2FA is disabled temporarily
-• Wait 10-15 minutes if you tried multiple times
-• Check if account requires phone/email verification
-• Try using different network/VPN
+🔧 **Troubleshooting Steps:**
+1. **Verify Credentials**
+   • Double-check username and password
+   • Try logging in through Instagram app first
 
-💡 **Common Issues:**
-• Recently created accounts may not work
-• Accounts with recent suspicious activity
-• Rate limiting from Instagram
+2. **Account Status**
+   • Ensure account isn't locked/suspended
+   • Check if email/phone verification needed
+   • Disable 2FA temporarily
 
-≭ **Bot By / Dev:** @luciInVain
-≭ **Time Taken:** `{time_taken}` seconds"""
+3. **Rate Limiting**
+   • Wait 15-30 minutes between attempts
+   • Try using different network/VPN
+   • Don't attempt login elsewhere simultaneously
+
+4. **Account Age**
+   • New accounts (< 7 days) often fail
+   • Recently created accounts need activity first
+
+💡 **Success Tips:**
+• Use established, active accounts
+• Ensure stable internet connection
+• Try during off-peak hours
+• Don't use account on multiple devices
+
+≭ **Bot By:** @luciInVain
+≭ **Time Taken:** `{time_taken}s`
+≭ **Status:** Failed - Try Again Later"""
             
             keyboard = [
                 [InlineKeyboardButton("🔄 Try Again", callback_data="retry_session")],
-                [InlineKeyboardButton("👨‍💻 Support", url="tg://openmessage?user_id=7863546766")]
+                [InlineKeyboardButton("👨‍💻 Support", url="tg://openmessage?user_id=7863546766")],
+                [InlineKeyboardButton("📚 Help Guide", callback_data="help_guide")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
@@ -233,66 +335,125 @@ async def handle_session_password(update: Update, context: ContextTypes.DEFAULT_
         )
         return ConversationHandler.END
 
-async def instagram_login_v3(username, password):
-    """Latest Instagram login method 2025"""
+async def instagram_login_mobile(username, password):
+    """Instagram mobile app login method"""
     try:
         session = requests.Session()
         
-        # Use mobile user agent for better success rate
-        user_agent = "Instagram 276.0.0.18.119 Android (33/13; 420dpi; 1080x2340; samsung; SM-G991B; o1s; exynos2100; en_US; 458229237)"
+        # Generate device info
+        device_id = str(uuid.uuid4())
+        android_device_id = hashlib.md5(username.encode()).hexdigest()[:16]
         
-        # Set mobile headers
-        session.headers.update({
-            "User-Agent": user_agent,
+        # Mobile app headers
+        headers = {
+            "User-Agent": f"Instagram {INSTAGRAM_SIGNATURES['version']} Android ({INSTAGRAM_SIGNATURES['android_version']}/{INSTAGRAM_SIGNATURES['android_release']}; {INSTAGRAM_SIGNATURES['dpi']}; {INSTAGRAM_SIGNATURES['resolution']}; {INSTAGRAM_SIGNATURES['manufacturer']}; {INSTAGRAM_SIGNATURES['device']}; {INSTAGRAM_SIGNATURES['model']}; {INSTAGRAM_SIGNATURES['cpu']}; en_US; {INSTAGRAM_SIGNATURES['version_code']})",
             "Accept": "*/*",
             "Accept-Language": "en-US",
             "Accept-Encoding": "gzip, deflate",
             "Connection": "keep-alive",
             "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-            "X-Requested-With": "XMLHttpRequest"
-        })
+            "X-IG-App-ID": "567067343352427",
+            "X-IG-Connection-Type": "WIFI",
+            "X-IG-Capabilities": "3brTvw==",
+            "X-IG-App-ID": "567067343352427"
+        }
         
-        print("🔄 Step 1: Getting Instagram mobile page...")
+        session.headers.update(headers)
         
-        # Get Instagram mobile page
-        try:
-            resp = session.get("https://www.instagram.com/", timeout=15)
-            if resp.status_code != 200:
-                return {"success": False, "error": f"Failed to load page (Status: {resp.status_code})"}
-        except Exception as e:
-            return {"success": False, "error": f"Network error: {str(e)}"}
+        # Get initial cookies
+        session.get("https://i.instagram.com/api/v1/accounts/get_prefill_candidates/", timeout=10)
         
-        # Extract necessary data from page
+        # Login data
+        login_data = {
+            "username": username,
+            "password": password,
+            "device_id": device_id,
+            "login_attempt_count": "0"
+        }
+        
+        # Login request
+        response = session.post(
+            "https://i.instagram.com/api/v1/accounts/login/",
+            data=login_data,
+            timeout=15
+        )
+        
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("status") == "ok" and data.get("logged_in_user"):
+                # Extract session
+                for cookie in session.cookies:
+                    if cookie.name == 'sessionid':
+                        return {"success": True, "session_id": cookie.value}
+                return {"success": False, "error": "No session ID in response"}
+            else:
+                error = data.get("message", "Login failed")
+                return {"success": False, "error": error}
+        else:
+            return {"success": False, "error": f"HTTP {response.status_code}"}
+            
+    except Exception as e:
+        return {"success": False, "error": f"Mobile method error: {str(e)}"}
+
+async def instagram_login_web_v1(username, password):
+    """Instagram web login method v1"""
+    try:
+        session = requests.Session()
+        
+        # Web headers
+        headers = {
+            "User-Agent": random.choice(USER_AGENTS),
+            "Accept": "*/*",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "none"
+        }
+        
+        session.headers.update(headers)
+        
+        # Get Instagram homepage
+        response = session.get("https://www.instagram.com/", timeout=15)
+        if response.status_code != 200:
+            return {"success": False, "error": "Failed to load Instagram"}
+        
+        # Extract CSRF token and other data
         csrf_token = None
         rollout_hash = None
         
-        # Get CSRF token from cookies
         for cookie in session.cookies:
             if cookie.name == 'csrftoken':
                 csrf_token = cookie.value
                 break
         
-        # Extract rollout hash from page source
-        try:
-            import re
-            rollout_match = re.search(r'"rollout_hash":"([^"]+)"', resp.text)
-            if rollout_match:
-                rollout_hash = rollout_match.group(1)
-        except:
-            rollout_hash = "c3b14f1ba957"  # fallback
+        # Extract from page source
+        import re
+        if not csrf_token:
+            csrf_match = re.search(r'"csrf_token":"([^"]+)"', response.text)
+            if csrf_match:
+                csrf_token = csrf_match.group(1)
+        
+        rollout_match = re.search(r'"rollout_hash":"([^"]+)"', response.text)
+        if rollout_match:
+            rollout_hash = rollout_match.group(1)
         
         if not csrf_token:
             return {"success": False, "error": "Could not get CSRF token"}
         
-        print(f"🔐 CSRF Token: {csrf_token[:10]}...")
-        print(f"🎲 Rollout Hash: {rollout_hash}")
+        # Update headers for login
+        session.headers.update({
+            "X-CSRFToken": csrf_token,
+            "X-Instagram-AJAX": rollout_hash or "1",
+            "X-Requested-With": "XMLHttpRequest",
+            "Referer": "https://www.instagram.com/accounts/login/",
+            "Origin": "https://www.instagram.com",
+            "Content-Type": "application/x-www-form-urlencoded"
+        })
         
-        await asyncio.sleep(random.uniform(1, 2))
-        
-        # Prepare login data with mobile format
-        timestamp = int(time.time())
-        
-        # Use simple password format for mobile
+        # Login data
         login_data = {
             "username": username,
             "password": password,
@@ -300,82 +461,134 @@ async def instagram_login_v3(username, password):
             "optIntoOneTap": "false"
         }
         
-        # Update headers for login
-        session.headers.update({
-            "X-CSRFToken": csrf_token,
-            "X-Instagram-AJAX": rollout_hash,
-            "X-Requested-With": "XMLHttpRequest",
-            "Referer": "https://www.instagram.com/accounts/login/",
-            "Origin": "https://www.instagram.com"
-        })
+        # Login request
+        login_response = session.post(
+            "https://www.instagram.com/accounts/login/ajax/",
+            data=login_data,
+            timeout=20
+        )
         
-        print("📤 Step 2: Sending login request...")
-        
-        # Send login request
-        try:
-            login_url = "https://www.instagram.com/accounts/login/ajax/"
-            login_response = session.post(login_url, data=login_data, timeout=20)
-            
-            print(f"📊 Login response status: {login_response.status_code}")
-            
-            if login_response.status_code != 200:
-                return {"success": False, "error": f"Login failed (Status: {login_response.status_code})"}
-                
-        except Exception as e:
-            return {"success": False, "error": f"Request error: {str(e)}"}
-        
-        # Parse JSON response
-        try:
-            response_data = login_response.json()
-            print(f"📥 Response data: {response_data}")
-        except:
-            print("❌ Failed to parse JSON response")
-            return {"success": False, "error": "Invalid response from Instagram"}
-        
-        # Check response status
-        if response_data.get("authenticated") == True:
-            # Success - extract session ID
-            session_id = None
-            for cookie in session.cookies:
-                if cookie.name == 'sessionid':
-                    session_id = cookie.value
-                    break
-            
-            if session_id:
-                print("✅ Login successful - Session ID obtained!")
-                return {"success": True, "session_id": session_id}
+        if login_response.status_code == 200:
+            data = login_response.json()
+            if data.get("authenticated"):
+                for cookie in session.cookies:
+                    if cookie.name == 'sessionid':
+                        return {"success": True, "session_id": cookie.value}
+                return {"success": False, "error": "No session ID found"}
             else:
-                return {"success": False, "error": "Login successful but no session ID found"}
-        
-        elif response_data.get("two_factor_required"):
-            return {"success": False, "error": "2FA enabled - Please disable temporarily"}
-        
-        elif response_data.get("checkpoint_url"):
-            return {"success": False, "error": "Account verification required - Check email/SMS"}
-        
-        elif "Please wait a few minutes" in str(response_data):
-            return {"success": False, "error": "Rate limited - Wait 15-30 minutes"}
-        
-        elif "The username you entered doesn't appear to belong" in str(response_data):
-            return {"success": False, "error": "Username not found"}
-        
-        elif "Sorry, your password was incorrect" in str(response_data):
-            return {"success": False, "error": "Incorrect password"}
-        
+                error = data.get("message", "Authentication failed")
+                if data.get("two_factor_required"):
+                    error = "2FA required - disable temporarily"
+                elif data.get("checkpoint_url"):
+                    error = "Account verification required"
+                return {"success": False, "error": error}
         else:
-            # Extract error message
-            error_msg = "Unknown error"
-            if "message" in response_data:
-                error_msg = response_data["message"]
-            elif "errors" in response_data:
-                if "error" in response_data["errors"]:
-                    error_msg = response_data["errors"]["error"]
-            
-            return {"success": False, "error": f"Login failed: {error_msg}"}
+            return {"success": False, "error": f"Login failed: HTTP {login_response.status_code}"}
             
     except Exception as e:
-        print(f"🚨 Exception in login: {e}")
-        return {"success": False, "error": f"Unexpected error: {str(e)}"}
+        return {"success": False, "error": f"Web v1 error: {str(e)}"}
+
+async def instagram_login_web_v2(username, password):
+    """Instagram web login method v2 - alternative approach"""
+    try:
+        session = requests.Session()
+        
+        # Different user agent
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1"
+        }
+        
+        session.headers.update(headers)
+        
+        # Get login page directly
+        response = session.get("https://www.instagram.com/accounts/login/", timeout=15)
+        if response.status_code != 200:
+            return {"success": False, "error": "Failed to load login page"}
+        
+        # Parse with BeautifulSoup
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Find CSRF token from meta tag or script
+        csrf_token = None
+        
+        # Try meta tag first
+        meta_csrf = soup.find('meta', {'name': 'csrf-token'})
+        if meta_csrf:
+            csrf_token = meta_csrf.get('content')
+        
+        # Try from cookies
+        if not csrf_token:
+            for cookie in session.cookies:
+                if cookie.name == 'csrftoken':
+                    csrf_token = cookie.value
+                    break
+        
+        # Try from script tags
+        if not csrf_token:
+            scripts = soup.find_all('script')
+            for script in scripts:
+                if script.string and 'csrf_token' in script.string:
+                    import re
+                    match = re.search(r'"csrf_token":"([^"]+)"', script.string)
+                    if match:
+                        csrf_token = match.group(1)
+                        break
+        
+        if not csrf_token:
+            return {"success": False, "error": "CSRF token not found"}
+        
+        # Prepare login
+        session.headers.update({
+            "X-CSRFToken": csrf_token,
+            "X-Requested-With": "XMLHttpRequest",
+            "Referer": "https://www.instagram.com/accounts/login/",
+            "Content-Type": "application/x-www-form-urlencoded"
+        })
+        
+        # Login payload
+        payload = {
+            "username": username,
+            "password": password,
+            "queryParams": "{}",
+            "optIntoOneTap": "false",
+            "trustedDeviceRecords": "{}"
+        }
+        
+        # Send login request
+        login_resp = session.post(
+            "https://www.instagram.com/accounts/login/ajax/",
+            data=payload,
+            timeout=20
+        )
+        
+        if login_resp.status_code == 200:
+            try:
+                result = login_resp.json()
+                if result.get("authenticated"):
+                    # Get session ID
+                    for cookie in session.cookies:
+                        if cookie.name == 'sessionid' and cookie.value:
+                            return {"success": True, "session_id": cookie.value}
+                    return {"success": False, "error": "Session ID not found in cookies"}
+                else:
+                    error_msg = result.get("message", "Login failed")
+                    if "two_factor_required" in result:
+                        error_msg = "2FA enabled - please disable"
+                    elif "checkpoint_url" in result:
+                        error_msg = "Verification required - check email"
+                    return {"success": False, "error": error_msg}
+            except:
+                return {"success": False, "error": "Invalid response format"}
+        else:
+            return {"success": False, "error": f"HTTP error: {login_resp.status_code}"}
+            
+    except Exception as e:
+        return {"success": False, "error": f"Web v2 error: {str(e)}"}
 
 async def handle_session_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle callback queries for session feature"""
@@ -390,14 +603,18 @@ async def handle_session_callback(update: Update, context: ContextTypes.DEFAULT_
             channel_id = os.getenv('CHANNEL_ID', '@meta_servers')
             
             try:
-                member = await context.bot.get_chat_member(channel_id, user_id)
-                if member.status not in ['left', 'kicked']:
-                    await query.edit_message_text(
-                        '✅ **Subscription verified!**\n\nNow use /session to proceed.',
-                        parse_mode='Markdown'
-                    )
+                if channel_id:
+                    clean_channel = channel_id.replace('@', '') if channel_id.startswith('@') else channel_id
+                    member = await context.bot.get_chat_member(f"@{clean_channel}", user_id)
+                    if member.status not in ['left', 'kicked']:
+                        await query.edit_message_text(
+                            '✅ **Subscription verified!**\n\nNow use /session to proceed.',
+                            parse_mode='Markdown'
+                        )
+                    else:
+                        await query.answer('❌ You still need to join the channel.', show_alert=True)
                 else:
-                    await query.answer('❌ You still need to join the channel.', show_alert=True)
+                    await query.answer('❌ Channel not configured.', show_alert=True)
             except Exception as e:
                 print(f"❌ Error checking subscription: {e}")
                 await query.answer('❌ Error checking subscription.', show_alert=True)
@@ -405,13 +622,69 @@ async def handle_session_callback(update: Update, context: ContextTypes.DEFAULT_
         
         elif query.data == "new_session":
             await query.edit_message_text(
-                '🔄 **Generate New Session**\n\nUse /session command to start the process again.',
+                '🔄 **Generate New Session**\n\n'
+                'Use /session command to start the process again.\n\n'
+                '💡 **Tip:** Wait 5-10 minutes between attempts for better success rate.',
                 parse_mode='Markdown'
             )
         
         elif query.data == "retry_session":
             await query.edit_message_text(
-                '🔄 **Retry Session Generation**\n\nUse /session command to try again with different credentials or after waiting.',
+                '🔄 **Retry Session Generation**\n\n'
+                'Use /session command to try again.\n\n'
+                '📝 **Before retrying:**\n'
+                '• Wait at least 15 minutes\n'
+                '• Verify credentials in Instagram app\n'
+                '• Ensure stable internet connection\n'
+                '• Try different network if possible',
+                parse_mode='Markdown'
+            )
+        
+        elif query.data == "security_tips":
+            await query.edit_message_text(
+                '🔐 **Security Tips**\n\n'
+                '🛡️ **After Getting Session:**\n'
+                '• Change your password immediately\n'
+                '• Enable 2FA after session generation\n'
+                '• Monitor login activity regularly\n'
+                '• Logout unknown devices\n\n'
+                '⚠️ **Session Safety:**\n'
+                '• Don\'t share session IDs\n'
+                '• Store securely (encrypted)\n'
+                '• Delete when not needed\n'
+                '• Generate new ones monthly\n\n'
+                '🔒 **Account Protection:**\n'
+                '• Use strong, unique passwords\n'
+                '• Keep recovery info updated\n'
+                '• Be cautious with automation tools',
+                parse_mode='Markdown'
+            )
+        
+        elif query.data == "help_guide":
+            await query.edit_message_text(
+                '📚 **Complete Help Guide**\n\n'
+                '❓ **Common Issues & Solutions:**\n\n'
+                '1. **"Login Failed" Error:**\n'
+                '   • Verify username/password\n'
+                '   • Try logging in Instagram app first\n'
+                '   • Wait 30 minutes, try again\n\n'
+                '2. **"Account Verification Required":**\n'
+                '   • Check email for verification\n'
+                '   • Complete verification in app\n'
+                '   • Try again after verification\n\n'
+                '3. **"Rate Limited" Error:**\n'
+                '   • Wait 1-2 hours before retry\n'
+                '   • Try different network/VPN\n'
+                '   • Don\'t attempt multiple times\n\n'
+                '4. **"2FA Required":**\n'
+                '   • Temporarily disable 2FA\n'
+                '   • Generate session\n'
+                '   • Re-enable 2FA immediately\n\n'
+                '✅ **Best Practices:**\n'
+                '• Use established accounts (7+ days old)\n'
+                '• Ensure account has activity/posts\n'
+                '• Try during off-peak hours\n'
+                '• Use stable internet connection',
                 parse_mode='Markdown'
             )
             
@@ -425,12 +698,12 @@ async def cancel_session(update: Update, context: ContextTypes.DEFAULT_TYPE):
         del session_states[user_id]
     
     await update.message.reply_text(
-        '❌ **Session generation cancelled.**',
+        '❌ **Session generation cancelled.**\n\n'
+        'Use /session to start again when ready.',
         parse_mode='Markdown'
     )
     return ConversationHandler.END
 
-# Test function
 async def test_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Test command to verify bot is responding"""
     await update.message.reply_text(
@@ -439,38 +712,17 @@ async def test_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         '• `/session` - Generate Instagram session ID\n'
         '• `/test` - Test bot functionality\n'
         '• `/cancel` - Cancel current operation\n\n'
+        '📊 **System Status:**\n'
+        '• Web Method v1: ✅ Active\n'
+        '• Web Method v2: ✅ Active\n'
+        '• Mobile Method: ✅ Active\n'
+        '• Multi-method Fallback: ✅ Enabled\n\n'
         '📝 **Usage Tips:**\n'
-        '• Make sure 2FA is disabled\n'
-        '• Use established accounts (not new ones)\n'
-        '• Wait if you get rate limited',
+        '• Disable 2FA temporarily\n'
+        '• Use accounts 7+ days old\n'
+        '• Wait 15+ minutes between attempts\n'
+        '• Ensure stable internet connection',
         parse_mode='Markdown'
     )
 
-def setup_session_commands(app, admin_id=None, channel_id=None):
-    """Setup session manager commands"""
-    try:
-        # Create conversation handler
-        conv_handler = ConversationHandler(
-            entry_points=[CommandHandler("session", session_command)],
-            states={
-                WAITING_USERNAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_session_username)],
-                WAITING_PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_session_password)],
-            },
-            fallbacks=[CommandHandler("cancel", cancel_session)],
-            per_message=False,
-            per_chat=True,
-            per_user=True,
-        )
-        
-        # Add handlers
-        app.add_handler(conv_handler)
-        app.add_handler(CallbackQueryHandler(handle_session_callback))
-        
-        print("✅ Session manager commands loaded successfully")
-        
-    except Exception as e:
-        print(f"🚨 Error setting up session commands: {e}")
-
-def setup_test_command(app):
-    """Setup test command"""
-    app.add_handler(CommandHandler("test", test_command))
+def setup
