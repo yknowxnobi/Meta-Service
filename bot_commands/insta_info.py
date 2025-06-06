@@ -37,55 +37,50 @@ async def insta_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         
         data = response.json()
+        
+        # Debug: Print the API response to see what we're getting
+        print(f"API Response: {data}")
+        
+        # Extract data from API response
         user_id = data.get('id2', 'N/A')
-        
-        # Fetch account creation year - Fixed the logic
-        creation_year = 'N/A'
-        if user_id != 'N/A':
-            try:
-                gojo_url = os.getenv('GOJOAPI_URL', 'https://gojoapi.pythonanywhere.com')
-                creation_response = requests.get(
-                    f"{gojo_url}/get-year",
-                    params={'Id': user_id},
-                    timeout=10
-                )
-                if creation_response.status_code == 200:
-                    creation_data = creation_response.json()
-                    creation_year = creation_data.get('year', 'N/A')
-                    if creation_year == 'N/A' or creation_year is None:
-                        creation_year = 'Could not fetch'
-                else:
-                    creation_year = 'Could not fetch'
-            except Exception as e:
-                print(f"Error fetching creation year: {e}")
-                creation_year = 'Could not fetch'
-        
-        # Format followers, following, posts with commas
+        username_display = data.get('username', 'N/A')
+        nickname = data.get('nickname', 'N/A')
         followers = data.get('followers', 0)
         following = data.get('following', 0)
         posts = data.get('posts', 0)
+        private_status = data.get('private', False)
+        verified_status = data.get('verified', False)
+        account_created = data.get('account_created', 'N/A')
         
         # Format numbers with commas
         followers_formatted = f"{followers:,}" if isinstance(followers, int) else str(followers)
         following_formatted = f"{following:,}" if isinstance(following, int) else str(following)
         posts_formatted = f"{posts:,}" if isinstance(posts, int) else str(posts)
         
-        # Format message
-        message = f"""
-🔍 **Instagram User Details**
+        # Format private status
+        private_text = "Yes" if private_status else "No"
+        
+        # Format verification status
+        verified_text = "✅ Verified" if verified_status else "❌ Not Verified"
+        
+        # Format creation year
+        creation_year = str(account_created) if account_created != 'N/A' and account_created is not None else 'N/A'
+        
+        # Create the formatted message exactly like web response
+        message = f"""🔍 **Instagram User Details**
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 
-👤 **User:** {data.get('username', 'N/A')}
-📛 **Name:** {data.get('nickname', 'N/A')}
-🆔 **ID:** {user_id}
-🔒 **Private:** {'Yes' if data.get('private') else 'No'}
-👥 **Followers:** {followers_formatted}
-🔄 **Following:** {following_formatted}
-📸 **Posts:** {posts_formatted}
-📅 **Created In:** {creation_year}
+👤 **User:** `{username_display}`
+📛 **Name:** `{nickname}`
+🆔 **ID:** `{user_id}`
+{verified_text}
+🔒 **Private:** `{private_text}`
+👥 **Followers:** `{followers_formatted}`
+🔄 **Following:** `{following_formatted}`
+📸 **Posts:** `{posts_formatted}`
+📅 **Created In:** `{creation_year}`
 
-━━━━━━━━━━━━━━━━━━━━━━━━━
-        """
+━━━━━━━━━━━━━━━━━━━━━━━━━"""
         
         await loading_msg.edit_text(message, parse_mode='Markdown')
         
@@ -94,6 +89,7 @@ async def insta_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except requests.exceptions.RequestException:
         await update.message.reply_text('🚨 Network error occurred. Please try again.')
     except Exception as e:
+        print(f"Error in insta_command: {e}")
         await update.message.reply_text(f'🚨 An error occurred: {str(e)}')
 
 async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
