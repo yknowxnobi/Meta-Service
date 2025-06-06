@@ -16,10 +16,9 @@ session_states = {}
 
 # User agents pool for rotation
 USER_AGENTS = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
     "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
 ]
 
@@ -151,6 +150,7 @@ async def handle_session_password(update: Update, context: ContextTypes.DEFAULT_
             print(f"⚠️ Could not delete password message: {e}")
         
         # Show processing message
+        start_time = time.time()
         processing_msg = await update.message.reply_text(
             '🔄 **Processing login request...**\n\n'
             '⏳ Please wait while we generate your session ID.\n'
@@ -158,8 +158,10 @@ async def handle_session_password(update: Update, context: ContextTypes.DEFAULT_
             parse_mode='Markdown'
         )
         
-        # Process login with improved method
-        result = await instagram_login_improved(username, password)
+        # Process login with new method
+        result = await instagram_login_v3(username, password)
+        end_time = time.time()
+        time_taken = round(end_time - start_time, 2)
         
         if result['success']:
             session_id = result['session_id']
@@ -176,7 +178,10 @@ async def handle_session_password(update: Update, context: ContextTypes.DEFAULT_
 ⚠️ **Important:** 
 • Session IDs can expire after some time
 • Generate a new one if you get authentication errors
-• Don't use this session simultaneously in multiple places"""
+• Don't use this session simultaneously in multiple places
+
+≭ **Bot By / Dev:** @luciInVain
+≭ **Time Taken:** `{time_taken}` seconds"""
             
             keyboard = [
                 [InlineKeyboardButton("🔄 Generate New", callback_data="new_session")],
@@ -196,12 +201,15 @@ async def handle_session_password(update: Update, context: ContextTypes.DEFAULT_
 • Make sure 2FA is disabled temporarily
 • Wait 10-15 minutes if you tried multiple times
 • Check if account requires phone/email verification
-• Use a different IP/network if possible
+• Try using different network/VPN
 
 💡 **Common Issues:**
 • Recently created accounts may not work
 • Accounts with recent suspicious activity
-• Using VPN/Proxy might cause issues"""
+• Rate limiting from Instagram
+
+≭ **Bot By / Dev:** @luciInVain
+≭ **Time Taken:** `{time_taken}` seconds"""
             
             keyboard = [
                 [InlineKeyboardButton("🔄 Try Again", callback_data="retry_session")],
@@ -225,147 +233,148 @@ async def handle_session_password(update: Update, context: ContextTypes.DEFAULT_
         )
         return ConversationHandler.END
 
-async def instagram_login_improved(username, password):
-    """Improved Instagram login with better error handling"""
+async def instagram_login_v3(username, password):
+    """Latest Instagram login method 2025"""
     try:
         session = requests.Session()
         
-        # Random user agent
-        user_agent = random.choice(USER_AGENTS)
+        # Use mobile user agent for better success rate
+        user_agent = "Instagram 276.0.0.18.119 Android (33/13; 420dpi; 1080x2340; samsung; SM-G991B; o1s; exynos2100; en_US; 458229237)"
         
-        # Enhanced headers
+        # Set mobile headers
         session.headers.update({
             "User-Agent": user_agent,
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.5",
-            "Accept-Encoding": "gzip, deflate, br",
-            "DNT": "1",
+            "Accept": "*/*",
+            "Accept-Language": "en-US",
+            "Accept-Encoding": "gzip, deflate",
             "Connection": "keep-alive",
-            "Upgrade-Insecure-Requests": "1",
-            "Sec-Fetch-Dest": "document",
-            "Sec-Fetch-Mode": "navigate",
-            "Sec-Fetch-Site": "none",
-            "Cache-Control": "max-age=0"
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+            "X-Requested-With": "XMLHttpRequest"
         })
         
-        print("🔄 Step 1: Getting Instagram login page...")
+        print("🔄 Step 1: Getting Instagram mobile page...")
         
-        # Step 1: Get initial page to establish session
+        # Get Instagram mobile page
         try:
             resp = session.get("https://www.instagram.com/", timeout=15)
             if resp.status_code != 200:
-                return {"success": False, "error": f"Failed to load Instagram (Status: {resp.status_code})"}
-        except requests.exceptions.RequestException as e:
+                return {"success": False, "error": f"Failed to load page (Status: {resp.status_code})"}
+        except Exception as e:
             return {"success": False, "error": f"Network error: {str(e)}"}
         
-        # Small delay to mimic human behavior
-        await asyncio.sleep(random.uniform(1, 3))
+        # Extract necessary data from page
+        csrf_token = None
+        rollout_hash = None
         
-        print("🔄 Step 2: Getting login page...")
+        # Get CSRF token from cookies
+        for cookie in session.cookies:
+            if cookie.name == 'csrftoken':
+                csrf_token = cookie.value
+                break
         
-        # Step 2: Get login page
+        # Extract rollout hash from page source
         try:
-            login_resp = session.get("https://www.instagram.com/accounts/login/", timeout=15)
-            if login_resp.status_code != 200:
-                return {"success": False, "error": f"Failed to load login page (Status: {login_resp.status_code})"}
-        except requests.exceptions.RequestException as e:
-            return {"success": False, "error": f"Login page error: {str(e)}"}
-        
-        # Extract CSRF token
-        csrf_token = session.cookies.get('csrftoken')
-        if not csrf_token:
-            # Try to extract from HTML
-            try:
-                soup = BeautifulSoup(login_resp.text, 'html.parser')
-                csrf_input = soup.find('input', {'name': 'csrfmiddlewaretoken'})
-                if csrf_input:
-                    csrf_token = csrf_input.get('value')
-            except:
-                pass
+            import re
+            rollout_match = re.search(r'"rollout_hash":"([^"]+)"', resp.text)
+            if rollout_match:
+                rollout_hash = rollout_match.group(1)
+        except:
+            rollout_hash = "c3b14f1ba957"  # fallback
         
         if not csrf_token:
-            return {"success": False, "error": "Could not obtain CSRF token"}
+            return {"success": False, "error": "Could not get CSRF token"}
         
-        print(f"🔐 CSRF Token obtained: {csrf_token[:10]}...")
+        print(f"🔐 CSRF Token: {csrf_token[:10]}...")
+        print(f"🎲 Rollout Hash: {rollout_hash}")
         
-        # Small delay
-        await asyncio.sleep(random.uniform(2, 4))
+        await asyncio.sleep(random.uniform(1, 2))
         
-        # Step 3: Prepare login data
+        # Prepare login data with mobile format
         timestamp = int(time.time())
-        enc_password = f"#PWD_INSTAGRAM_BROWSER:0:{timestamp}:{password}"
         
-        # More comprehensive login payload
+        # Use simple password format for mobile
         login_data = {
             "username": username,
-            "enc_password": enc_password,
+            "password": password,
             "queryParams": "{}",
-            "optIntoOneTap": "false",
-            "trustedDeviceRecords": "{}",
-            "stopDeletionNonce": "",
-            "queryParams": "{}"
+            "optIntoOneTap": "false"
         }
         
-        # Update headers for login request
+        # Update headers for login
         session.headers.update({
             "X-CSRFToken": csrf_token,
+            "X-Instagram-AJAX": rollout_hash,
             "X-Requested-With": "XMLHttpRequest",
             "Referer": "https://www.instagram.com/accounts/login/",
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Accept": "*/*",
             "Origin": "https://www.instagram.com"
         })
         
-        print("📤 Step 3: Sending login request...")
+        print("📤 Step 2: Sending login request...")
         
-        # Step 4: Send login request
+        # Send login request
         try:
-            login_response = session.post(
-                "https://www.instagram.com/api/v1/web/accounts/login/ajax/",
-                data=login_data,
-                timeout=20
-            )
+            login_url = "https://www.instagram.com/accounts/login/ajax/"
+            login_response = session.post(login_url, data=login_data, timeout=20)
+            
+            print(f"📊 Login response status: {login_response.status_code}")
             
             if login_response.status_code != 200:
-                return {"success": False, "error": f"Login request failed (Status: {login_response.status_code})"}
+                return {"success": False, "error": f"Login failed (Status: {login_response.status_code})"}
                 
-        except requests.exceptions.RequestException as e:
-            return {"success": False, "error": f"Login request error: {str(e)}"}
+        except Exception as e:
+            return {"success": False, "error": f"Request error: {str(e)}"}
         
-        # Parse response
+        # Parse JSON response
         try:
             response_data = login_response.json()
-            print(f"📥 Login response: {response_data}")
-        except json.JSONDecodeError:
+            print(f"📥 Response data: {response_data}")
+        except:
+            print("❌ Failed to parse JSON response")
             return {"success": False, "error": "Invalid response from Instagram"}
         
-        # Check login result
-        if response_data.get("authenticated"):
-            session_id = session.cookies.get("sessionid")
+        # Check response status
+        if response_data.get("authenticated") == True:
+            # Success - extract session ID
+            session_id = None
+            for cookie in session.cookies:
+                if cookie.name == 'sessionid':
+                    session_id = cookie.value
+                    break
+            
             if session_id:
-                print("✅ Login successful!")
+                print("✅ Login successful - Session ID obtained!")
                 return {"success": True, "session_id": session_id}
             else:
-                return {"success": False, "error": "Login succeeded but no session ID found"}
+                return {"success": False, "error": "Login successful but no session ID found"}
         
         elif response_data.get("two_factor_required"):
-            return {"success": False, "error": "2FA is enabled. Please disable it temporarily"}
+            return {"success": False, "error": "2FA enabled - Please disable temporarily"}
         
         elif response_data.get("checkpoint_url"):
-            return {"success": False, "error": "Account verification required. Check your email/phone"}
+            return {"success": False, "error": "Account verification required - Check email/SMS"}
         
         elif "Please wait a few minutes" in str(response_data):
-            return {"success": False, "error": "Rate limited. Please wait 15-30 minutes"}
+            return {"success": False, "error": "Rate limited - Wait 15-30 minutes"}
         
-        elif "incorrect" in str(response_data).lower():
-            return {"success": False, "error": "Incorrect username or password"}
+        elif "The username you entered doesn't appear to belong" in str(response_data):
+            return {"success": False, "error": "Username not found"}
+        
+        elif "Sorry, your password was incorrect" in str(response_data):
+            return {"success": False, "error": "Incorrect password"}
         
         else:
-            error_msg = response_data.get("message", "Unknown login error")
+            # Extract error message
+            error_msg = "Unknown error"
+            if "message" in response_data:
+                error_msg = response_data["message"]
+            elif "errors" in response_data:
+                if "error" in response_data["errors"]:
+                    error_msg = response_data["errors"]["error"]
+            
             return {"success": False, "error": f"Login failed: {error_msg}"}
             
     except Exception as e:
-        print(f"🚨 Login exception: {e}")
+        print(f"🚨 Exception in login: {e}")
         return {"success": False, "error": f"Unexpected error: {str(e)}"}
 
 async def handle_session_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -421,7 +430,7 @@ async def cancel_session(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return ConversationHandler.END
 
-# Test function with more detailed info
+# Test function
 async def test_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Test command to verify bot is responding"""
     await update.message.reply_text(
