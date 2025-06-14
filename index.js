@@ -339,7 +339,7 @@ bot.command('start', async (ctx) => {
     });
   }
 
-  await ctx.replyWithPhoto('https://example.com/menu.jpg', { // Replace with your photo URL
+  await ctx.replyWithPhoto('https://t.me/ziddion/636', { // Replace with your photo URL
     caption: `Welcome <b>${ctx.from.first_name || 'user'}</b>!\n\nChoose an option to proceed:`,
     parse_mode: 'HTML',
     reply_markup: {
@@ -358,7 +358,7 @@ bot.action('insta_menu', checkChannels, async (ctx) => {
   await ctx.answerCbQuery();
   await ctx.editMessageMedia({
     type: 'photo',
-    media: 'https://example.com/insta_menu.jpg', // Replace with your photo URL
+    media: 'https://t.me/ziddion/636', // Replace with your photo URL
     caption: '📸 Instagram Server\nChoose an option:',
     parse_mode: 'HTML'
   }, {
@@ -376,7 +376,7 @@ bot.action('wp_menu', checkChannels, async (ctx) => {
   await ctx.answerCbQuery();
   await ctx.editMessageMedia({
     type: 'photo',
-    media: 'https://example.com/wp_menu.jpg', // Replace with your photo URL
+    media: 'https://t.me/ziddion/636', // Replace with your photo URL
     caption: '📱 WhatsApp Server\nChoose an option:',
     parse_mode: 'HTML'
   }, {
@@ -393,7 +393,7 @@ bot.action('tg_menu', checkChannels, async (ctx) => {
   await ctx.answerCbQuery();
   await ctx.editMessageMedia({
     type: 'photo',
-    media: 'https://example.com/tg_menu.jpg', // Replace with your photo URL
+    media: 'https://t.me/ziddion/636', // Replace with your photo URL
     caption: '💬 Telegram Server\nChoose an option:',
     parse_mode: 'HTML'
   }, {
@@ -410,7 +410,7 @@ bot.action('yt_menu', checkChannels, async (ctx) => {
   await ctx.answerCbQuery();
   await ctx.editMessageMedia({
     type: 'photo',
-    media: 'https://example.com/yt_menu.jpg', // Replace with your photo URL
+    media: 'https://t.me/ziddion/636', // Replace with your photo URL
     caption: '📹 YouTube Server\nChoose an option:',
     parse_mode: 'HTML'
   }, {
@@ -467,7 +467,7 @@ bot.action('back_main', async (ctx) => {
   await ctx.answerCbQuery();
   await ctx.editMessageMedia({
     type: 'photo',
-    media: 'https://example.com/menu.jpg', // Replace with your photo URL
+    media: 'https://t.me/ziddion/636', // Replace with your photo URL
     caption: `Welcome <b>${ctx.from.first_name || 'user'}</b>!\n\nChoose an option to proceed:`,
     parse_mode: 'HTML'
   }, {
@@ -640,7 +640,7 @@ bot.action('check_fsub', async (ctx) => {
     await ctx.answerCbQuery('Thank you! Now choose an option.');
     await ctx.editMessageMedia({
       type: 'photo',
-      media: 'https://example.com/menu.jpg', // Replace with your photo URL
+      media: 'https://t.me/ziddion/636', // Replace with your photo URL
       caption: `Welcome <b>${ctx.from.first_name || 'user'}</b>!\n\nChoose an option to proceed:`,
       parse_mode: 'HTML'
     }, {
