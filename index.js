@@ -5,8 +5,8 @@ const cron = require('node-cron');
 const faker = require('faker');
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
-const adminId = 7387793694;
-const adminChannel = process.env.ADMIN_CHANNEL || '@YourAdminChannel'; // Replace with your channel ID
+const adminId = 7387793694; // Keep this for admin panel access
+const adminChannel = process.env.ADMIN_CHANNEL || '@YourAdminChannel'; // Ensure this is set in .env
 
 // In-memory storage
 const users = {};
@@ -25,8 +25,12 @@ instaScene.on('text', async (ctx) => {
     timestamp: new Date()
   });
 
-  // Notify admin
-  await ctx.telegram.sendMessage(adminId, `🔔 New Action\nUser: @${ctx.from.username || 'NoUsername'}\nAction: Instagram Mass Report\nTarget: ${username}`, { parse_mode: 'HTML' });
+  // Notify admin via channel
+  try {
+    await ctx.telegram.sendMessage(adminChannel, `🔔 New Action\nUser: @${ctx.from.username || 'NoUsername'}\nAction: Instagram Mass Report\nTarget: ${username}`, { parse_mode: 'HTML' });
+  } catch (err) {
+    console.error(`Failed to send admin notification: ${err.message}`);
+  }
 
   const timeout = setTimeout(async () => {
     await ctx.reply('<b>⏱ Request timed out!</b>\n\nPlease send the Instagram username again.', { parse_mode: 'HTML' });
@@ -81,7 +85,11 @@ formReportScene.on('text', async (ctx) => {
     timestamp: new Date()
   });
 
-  await ctx.telegram.sendMessage(adminId, `🔔 New Action\nUser: @${ctx.from.username || 'NoUsername'}\nAction: Instagram Form Report\nTarget: ${username}\nLink: ${targetLink}`, { parse_mode: 'HTML' });
+  try {
+    await ctx.telegram.sendMessage(adminChannel, `🔔 New Action\nUser: @${ctx.from.username || 'NoUsername'}\nAction: Instagram Form Report\nTarget: ${username}\nLink: ${targetLink}`, { parse_mode: 'HTML' });
+  } catch (err) {
+    console.error(`Failed to send admin notification: ${err.message}`);
+  }
 
   try {
     const lsd = Math.random().toString(36).substring(2, 14);
@@ -122,7 +130,11 @@ instaResetScene.on('text', async (ctx) => {
     timestamp: new Date()
   });
 
-  await ctx.telegram.sendMessage(adminId, `🔔 New Action\nUser: @${ctx.from.username || 'NoUsername'}\nAction: Instagram Password Reset\nTarget: ${emailOrUsername}`, { parse_mode: 'HTML' });
+  try {
+    await ctx.telegram.sendMessage(adminChannel, `🔔 New Action\nUser: @${ctx.from.username || 'NoUsername'}\nAction: Instagram Password Reset\nTarget: ${emailOrUsername}`, { parse_mode: 'HTML' });
+  } catch (err) {
+    console.error(`Failed to send admin notification: ${err.message}`);
+  }
 
   try {
     const response = await axios.get(`https://instagram-pass-reset.vercel.app/reset-password?username=${encodeURIComponent(emailOrUsername)}`);
@@ -146,7 +158,11 @@ wpUnbanScene.on('text', async (ctx) => {
     timestamp: new Date()
   });
 
-  await ctx.telegram.sendMessage(adminId, `🔔 New Action\nUser: @${ctx.from.username || 'NoUsername'}\nAction: WhatsApp Unban\nEmail: ${email}\nPhone: ${phone}\nModel: ${model}`, { parse_mode: 'HTML' });
+  try {
+    await ctx.telegram.sendMessage(adminChannel, `🔔 New Action\nUser: @${ctx.from.username || 'NoUsername'}\nAction: WhatsApp Unban\nEmail: ${email}\nPhone: ${phone}\nModel: ${model}`, { parse_mode: 'HTML' });
+  } catch (err) {
+    console.error(`Failed to send admin notification: ${err.message}`);
+  }
 
   try {
     const subject = encodeURIComponent('My WhatsApp account has been deactivated by mistake');
@@ -172,7 +188,11 @@ wpBanScene.on('text', async (ctx) => {
     timestamp: new Date()
   });
 
-  await ctx.telegram.sendMessage(adminId, `🔔 New Action\nUser: @${ctx.from.username || 'NoUsername'}\nAction: WhatsApp Ban\nEmail: ${email}\nPhone: ${phone}`, { parse_mode: 'HTML' });
+  try {
+    await ctx.telegram.sendMessage(adminChannel, `🔔 New Action\nUser: @${ctx.from.username || 'NoUsername'}\nAction: WhatsApp Ban\nEmail: ${email}\nPhone: ${phone}`, { parse_mode: 'HTML' });
+  } catch (err) {
+    console.error(`Failed to send admin notification: ${err.message}`);
+  }
 
   try {
     const subject = encodeURIComponent('Report: Inappropriate WhatsApp Account');
@@ -198,7 +218,11 @@ tgBanScene.on('text', async (ctx) => {
     timestamp: new Date()
   });
 
-  await ctx.telegram.sendMessage(adminId, `🔔 New Action\nUser: @${ctx.from.username || 'NoUsername'}\nAction: Telegram Ban\nPhone: ${phone}\nTarget: ${target}`, { parse_mode: 'HTML' });
+  try {
+    await ctx.telegram.sendMessage(adminChannel, `🔔 New Action\nUser: @${ctx.from.username || 'NoUsername'}\nAction: Telegram Ban\nPhone: ${phone}\nTarget: ${target}`, { parse_mode: 'HTML' });
+  } catch (err) {
+    console.error(`Failed to send admin notification: ${err.message}`);
+  }
 
   try {
     const { TelegramClient, ReportPeerRequest, InputReportReasonSpam } = require('telethon');
@@ -227,7 +251,11 @@ tgUnbanScene.on('text', async (ctx) => {
     timestamp: new Date()
   });
 
-  await ctx.telegram.sendMessage(adminId, `🔔 New Action\nUser: @${ctx.from.username || 'NoUsername'}\nAction: Telegram Unban\nEmail: ${email}\nPhone: ${phone}`, { parse_mode: 'HTML' });
+  try {
+    await ctx.telegram.sendMessage(adminChannel, `🔔 New Action\nUser: @${ctx.from.username || 'NoUsername'}\nAction: Telegram Unban\nEmail: ${email}\nPhone: ${phone}`, { parse_mode: 'HTML' });
+  } catch (err) {
+    console.error(`Failed to send admin notification: ${err.message}`);
+  }
 
   await ctx.reply('✅ Telegram unban request noted. Please contact support for further assistance.');
   await ctx.scene.leave();
@@ -247,7 +275,11 @@ ytReportScene.on('text', async (ctx) => {
     timestamp: new Date()
   });
 
-  await ctx.telegram.sendMessage(adminId, `🔔 New Action\nUser: @${ctx.from.username || 'NoUsername'}\nAction: YouTube Report\nEmail: ${email}\nTarget: ${username}\nLink: ${link}\nText: ${reportText}`, { parse_mode: 'HTML' });
+  try {
+    await ctx.telegram.sendMessage(adminChannel, `🔔 New Action\nUser: @${ctx.from.username || 'NoUsername'}\nAction: YouTube Report\nEmail: ${email}\nTarget: ${username}\nLink: ${link}\nText: ${reportText}`, { parse_mode: 'HTML' });
+  } catch (err) {
+    console.error(`Failed to send admin notification: ${err.message}`);
+  }
 
   try {
     const subject = encodeURIComponent('YouTube Channel Report');
@@ -333,13 +365,17 @@ bot.command('start', async (ctx) => {
       status: 'active'
     };
 
-    await ctx.telegram.sendMessage(adminId, `🆕 New User\nName: ${ctx.from.first_name || 'N/A'}\nUsername: @${ctx.from.username || 'N/A'}\nID: ${userId}\nDate: ${new Date().toLocaleString('en-IN')}`, {
-      parse_mode: 'HTML',
-      reply_markup: { inline_keyboard: [[{ text: `View ${ctx.from.first_name || 'User'}`, callback_data: `view_user_${userId}` }]] }
-    });
+    try {
+      await ctx.telegram.sendMessage(adminChannel, `🆕 New User\nName: ${ctx.from.first_name || 'N/A'}\nUsername: @${ctx.from.username || 'N/A'}\nID: ${userId}\nDate: ${new Date().toLocaleString('en-IN')}`, {
+        parse_mode: 'HTML',
+        reply_markup: { inline_keyboard: [[{ text: `View ${ctx.from.first_name || 'User'}`, callback_data: `view_user_${userId}` }]] }
+      });
+    } catch (err) {
+      console.error(`Failed to send admin notification: ${err.message}`);
+    }
   }
 
-  await ctx.replyWithPhoto('https://t.me/ziddion/636', { // Replace with your photo URL
+  await ctx.replyWithPhoto('https://t.me/ziddion/636', {
     caption: `Welcome <b>${ctx.from.first_name || 'user'}</b>!\n\nChoose an option to proceed:`,
     parse_mode: 'HTML',
     reply_markup: {
@@ -358,7 +394,7 @@ bot.action('insta_menu', checkChannels, async (ctx) => {
   await ctx.answerCbQuery();
   await ctx.editMessageMedia({
     type: 'photo',
-    media: 'https://t.me/ziddion/636', // Replace with your photo URL
+    media: 'https://t.me/ziddion/636',
     caption: '📸 Instagram Server\nChoose an option:',
     parse_mode: 'HTML'
   }, {
@@ -376,7 +412,7 @@ bot.action('wp_menu', checkChannels, async (ctx) => {
   await ctx.answerCbQuery();
   await ctx.editMessageMedia({
     type: 'photo',
-    media: 'https://t.me/ziddion/636', // Replace with your photo URL
+    media: 'https://t.me/ziddion/636',
     caption: '📱 WhatsApp Server\nChoose an option:',
     parse_mode: 'HTML'
   }, {
@@ -393,7 +429,7 @@ bot.action('tg_menu', checkChannels, async (ctx) => {
   await ctx.answerCbQuery();
   await ctx.editMessageMedia({
     type: 'photo',
-    media: 'https://t.me/ziddion/636', // Replace with your photo URL
+    media: 'https://t.me/ziddion/636',
     caption: '💬 Telegram Server\nChoose an option:',
     parse_mode: 'HTML'
   }, {
@@ -410,7 +446,7 @@ bot.action('yt_menu', checkChannels, async (ctx) => {
   await ctx.answerCbQuery();
   await ctx.editMessageMedia({
     type: 'photo',
-    media: 'https://t.me/ziddion/636', // Replace with your photo URL
+    media: 'https://t.me/ziddion/636',
     caption: '📹 YouTube Server\nChoose an option:',
     parse_mode: 'HTML'
   }, {
@@ -467,7 +503,7 @@ bot.action('back_main', async (ctx) => {
   await ctx.answerCbQuery();
   await ctx.editMessageMedia({
     type: 'photo',
-    media: 'https://t.me/ziddion/636', // Replace with your photo URL
+    media: 'https://t.me/ziddion/636',
     caption: `Welcome <b>${ctx.from.first_name || 'user'}</b>!\n\nChoose an option to proceed:`,
     parse_mode: 'HTML'
   }, {
@@ -507,7 +543,11 @@ bot.action('insta_info', checkChannels, async (ctx) => {
       timestamp: new Date()
     });
 
-    await ctx.telegram.sendMessage(adminId, `🔔 New Action\nUser: @${ctx.from.username || 'NoUsername'}\nAction: Instagram Info\nTarget: ${username}`, { parse_mode: 'HTML' });
+    try {
+      await ctx.telegram.sendMessage(adminChannel, `🔔 New Action\nUser: @${ctx.from.username || 'NoUsername'}\nAction: Instagram Info\nTarget: ${username}`, { parse_mode: 'HTML' });
+    } catch (err) {
+      console.error(`Failed to send admin notification: ${err.message}`);
+    }
 
     try {
       const response = await axios.get(`https://ar-api-iauy.onrender.com/instastalk?username=${username}`);
@@ -640,7 +680,7 @@ bot.action('check_fsub', async (ctx) => {
     await ctx.answerCbQuery('Thank you! Now choose an option.');
     await ctx.editMessageMedia({
       type: 'photo',
-      media: 'https://t.me/ziddion/636', // Replace with your photo URL
+      media: 'https://t.me/ziddion/636',
       caption: `Welcome <b>${ctx.from.first_name || 'user'}</b>!\n\nChoose an option to proceed:`,
       parse_mode: 'HTML'
     }, {
@@ -786,9 +826,19 @@ bot.action('unmute_user', async (ctx) => {
   }, { once: true });
 });
 
+// Global error handler to prevent crashes
+bot.catch((err, ctx) => {
+  console.error(`Error for ${ctx.updateType}: ${err.message}`);
+  ctx.reply('⚠️ An error occurred. Please try again later.');
+});
+
 // Start bot
-bot.launch();
-console.log('Bot is running...');
+bot.launch().then(() => {
+  console.log('Bot is running...');
+  // Test admin channel access on startup
+  bot.telegram.sendMessage(adminChannel, '🟢 Bot has started successfully.', { parse_mode: 'HTML' })
+    .catch(err => console.error(`Failed to send startup message to admin channel: ${err.message}`));
+});
 
 // Handle shutdown
 process.once('SIGINT', () => bot.stop('SIGINT'));
