@@ -9,9 +9,10 @@
   "dependencies": {
     "telegraf": "^4.16.3",
     "axios": "^1.7.7",
-    "mongodb": "^6.9.0",
     "dotenv": "^16.4.5",
-    "node-cron": "^3.0.3"
+    "node-cron": "^3.0.3",
+    "faker": "^5.5.3",
+    "telethon": "^1.36.0"
   },
   "engines": {
     "node": ">=18.0.0"
