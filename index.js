@@ -325,7 +325,7 @@ bot.use(session());
 bot.use(stage.middleware());
 
 // Channel check middleware
-const channels = ['@PythonBotz', '@Channel2', '@Channel3', '@Channel4']; // Replace with your channels
+const channels = ['@nobi_shops']; // Replace with your channels
 async function checkChannels(ctx, next) {
   const userId = ctx.from.id;
   let isMember = true;
@@ -478,12 +478,12 @@ bot.action('help', checkChannels, async (ctx) => {
     `📱 <b>WP Server:</b> WhatsApp Unban, WhatsApp Ban\n` +
     `💬 <b>Tele Server:</b> Telegram Unban, Telegram Ban\n` +
     `📹 <b>YT Server:</b> YouTube Channel Report\n\n` +
-    `Join our channels for updates: @PythonBotz`,
+    `Join our channels for updates: @meta_server`,
     {
       parse_mode: 'HTML',
       reply_markup: {
         inline_keyboard: [
-          [{ text: 'Updated', url: 't.me/PythonBotz' }, { text: 'Support', url: 't.me/offchats' }],
+          [{ text: 'Updated', url: 't.me/meta_server' }, { text: 'Support', url: 't.me/meta_familys' }],
           [{ text: '🔙 Back', callback_data: 'back_main' }]
         ]
       }
@@ -493,7 +493,7 @@ bot.action('help', checkChannels, async (ctx) => {
 
 bot.action('developer', checkChannels, async (ctx) => {
   await ctx.answerCbQuery();
-  await ctx.editMessageText('👨‍💻 <b>Developer</b>\n\nContact: @YourDeveloper\nSupport: t.me/offchats', {
+  await ctx.editMessageText('👨‍💻 <b>Developer</b>\n\nContact: @YourDeveloper\nSupport: t.me/meta_familys', {
     parse_mode: 'HTML',
     reply_markup: { inline_keyboard: [[{ text: '🔙 Back', callback_data: 'back_main' }]] }
   });
