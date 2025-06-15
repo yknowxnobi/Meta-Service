@@ -12,6 +12,36 @@ const adminChannel = process.env.ADMIN_CHANNEL || '@YourAdminChannel'; // Ensure
 const users = {};
 const actions = [];
 
+// Function to fetch Instagram user info with retry logic
+async function fetchInstaUserInfo(username, retries = 2, timeout = 5000) {
+  // Normalize username: remove @ if present
+  username = username.replace('@', '').trim();
+
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const response = await axios.get(`https://ar-api-iauy.onrender.com/instastalk?username=${encodeURIComponent(username)}`, {
+        timeout: timeout // 5 seconds timeout
+      });
+
+      console.log(`API Response for username ${username}:`, response.data); // Log the raw API response
+
+      // Check if response.data exists and has the expected structure
+      if (!response.data) {
+        throw new Error('Empty response from API');
+      }
+
+      return response.data;
+    } catch (err) {
+      console.error(`API attempt ${attempt}/${retries} failed for username ${username}: ${err.message}`);
+      if (attempt === retries) {
+        throw err; // After all retries fail, throw the error
+      }
+      // Wait before retrying
+      await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+    }
+  }
+}
+
 // Scene for Method Generate
 const instaScene = new Scenes.WizardScene(
   'insta_scene',
@@ -43,11 +73,11 @@ const instaScene = new Scenes.WizardScene(
     }
 
     try {
-      const res = await axios.get(`https://ar-api-iauy.onrender.com/instastalk?username=${username}`);
-      const data = res.data;
+      const data = await fetchInstaUserInfo(username);
 
-      if (!data || !data.success) {
-        await ctx.reply('<b>Invalid Instagram username or not found.</b>', { parse_mode: 'HTML' });
+      // Relaxed check: if data exists and has username, consider it valid
+      if (!data || (!data.success && !data.username)) {
+        await ctx.reply('<b>Invalid Instagram username or not found.</b>\n\nRaw API response logged for debugging.', { parse_mode: 'HTML' });
         return await ctx.scene.leave();
       }
 
@@ -72,8 +102,8 @@ const instaScene = new Scenes.WizardScene(
         }
       });
     } catch (err) {
-      console.error(`API error in method_generate: ${err.message}`, err.response ? err.response.data : 'No response data');
-      await ctx.reply('<b>Unable to verify the username. The API might be down or returned an unexpected response.</b>\n\nPlease try again later.', { parse_mode: 'HTML' });
+      console.error(`Error in method_generate: ${err.message}`);
+      await ctx.reply(`<b>Unable to verify the username.</b>\nError: ${err.message}\n\nPlease try again later.`, { parse_mode: 'HTML' });
       return await ctx.scene.leave();
     }
 
@@ -509,11 +539,11 @@ const accountReportScene = new Scenes.WizardScene(
     }
 
     try {
-      const res = await axios.get(`https://ar-api-iauy.onrender.com/instastalk?username=${username}`);
-      const data = res.data;
+      const data = await fetchInstaUserInfo(username);
 
-      if (!data || !data.success) {
-        await ctx.reply('<b>Invalid Instagram username or not found.</b>', { parse_mode: 'HTML' });
+      // Relaxed check: if data exists and has username, consider it valid
+      if (!data || (!data.success && !data.username)) {
+        await ctx.reply('<b>Invalid Instagram username or not found.</b>\n\nRaw API response logged for debugging.', { parse_mode: 'HTML' });
         return await ctx.scene.leave();
       }
 
@@ -538,8 +568,8 @@ const accountReportScene = new Scenes.WizardScene(
         }
       });
     } catch (err) {
-      console.error(`API error in account_report: ${err.message}`, err.response ? err.response.data : 'No response data');
-      await ctx.reply('<b>Unable to verify the username. The API might be down or returned an unexpected response.</b>\n\nPlease try again later.', { parse_mode: 'HTML' });
+      console.error(`Error in account_report: ${err.message}`);
+      await ctx.reply(`<b>Unable to verify the username.</b>\nError: ${err.message}\n\nPlease try again later.`, { parse_mode: 'HTML' });
       return await ctx.scene.leave();
     }
 
@@ -819,27 +849,29 @@ bot.action('insta_info', checkChannels, async (ctx) => {
     }
 
     try {
-      const response = await axios.get(`https://ar-api-iauy.onrender.com/instastalk?username=${username}`);
-      const data = response.data;
-      if (data && data.success) {
-        let message = `*Instagram User Details*\n`;
-        message += `-------------------------\n`;
-        message += `👤 *User:* ${data.username || 'N/A'}\n`;
-        message += `📛 *Name:* ${data.full_name || 'N/A'}\n`;
-        message += `🆔 *ID:* ${data.id || 'N/A'}\n`;
-        message += `🔒 *Private:* ${data.is_private ? 'Yes' : 'No'}\n`;
-        message += `👥 *Followers:* ${data.follower_count || 'N/A'}\n`;
-        message += `🔄 *Following:* ${data.following_count || 'N/A'}\n`;
-        message += `📸 *Posts:* ${data.media_count || 'N/A'}\n`;
-        message += `📅 *Account Created:* ${data.account_created || 'N/A'}\n`;
-        message += `-------------------------\n`;
-        await ctx.reply(message, { parse_mode: 'Markdown' });
-      } else {
-        await ctx.reply('⚠️ Failed to fetch user details. Username may be invalid.');
+      const data = await fetchInstaUserInfo(username);
+
+      // Relaxed check: if data exists and has username, consider it valid
+      if (!data || (!data.success && !data.username)) {
+        await ctx.reply('⚠️ Failed to fetch user details. Username may be invalid.\n\nRaw API response logged for debugging.');
+        return;
       }
+
+      let message = `*Instagram User Details*\n`;
+      message += `-------------------------\n`;
+      message += `👤 *User:* ${data.username || 'N/A'}\n`;
+      message += `📛 *Name:* ${data.full_name || 'N/A'}\n`;
+      message += `🆔 *ID:* ${data.id || 'N/A'}\n`;
+      message += `🔒 *Private:* ${data.is_private ? 'Yes' : 'No'}\n`;
+      message += `👥 *Followers:* ${data.follower_count || 'N/A'}\n`;
+      message += `🔄 *Following:* ${data.following_count || 'N/A'}\n`;
+      message += `📸 *Posts:* ${data.media_count || 'N/A'}\n`;
+      message += `📅 *Account Created:* ${data.account_created || 'N/A'}\n`;
+      message += `-------------------------\n`;
+      await ctx.reply(message, { parse_mode: 'Markdown' });
     } catch (err) {
-      console.error(`API error in insta_info: ${err.message}`, err.response ? err.response.data : 'No response data');
-      await ctx.reply(`⚠️ Unable to fetch details. The API might be down or returned an unexpected response. Please try again later.`);
+      console.error(`Error in insta_info: ${err.message}`);
+      await ctx.reply(`⚠️ Unable to fetch details.\nError: ${err.message}\n\nPlease try again later.`);
     }
   };
 
@@ -1017,12 +1049,11 @@ bot.action(/^account_confirm_yes_(.+)$/, async (ctx) => {
   // Delete the progress bar message
   await ctx.telegram.deleteMessage(ctx.chat.id, loadingMsg.message_id);
 
-  // Fetch user info again to display (since scenes don't persist state across callbacks)
+  // Fetch user info again to display
   let userInfo = '';
   try {
-    const res = await axios.get(`https://ar-api-iauy.onrender.com/instastalk?username=${username}`);
-    const data = res.data;
-    if (data && data.success) {
+    const data = await fetchInstaUserInfo(username);
+    if (data && (data.success || data.username)) {
       userInfo = `• <b>Username:</b> ${data.username || 'N/A'}\n` +
         `• <b>Nickname:</b> ${data.full_name || 'N/A'}\n` +
         `• <b>Followers:</b> ${data.follower_count || 'N/A'}\n` +
@@ -1036,7 +1067,7 @@ bot.action(/^account_confirm_yes_(.+)$/, async (ctx) => {
         `• <b>Created At:</b> N/A`;
     }
   } catch (err) {
-    console.error(`API error in account_report final fetch: ${err.message}`, err.response ? err.response.data : 'No response data');
+    console.error(`Error in account_report final fetch: ${err.message}`);
     userInfo = `• <b>Username:</b> ${username}\n` +
       `• <b>Nickname:</b> N/A\n` +
       `• <b>Followers:</b> N/A\n` +
