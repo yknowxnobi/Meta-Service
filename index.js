@@ -12,7 +12,7 @@ const adminChannel = process.env.ADMIN_CHANNEL || '@YourAdminChannel'; // Ensure
 const users = {};
 const actions = [];
 
-// Scene for Method Generate (previously Account Mass Report)
+// Scene for Method Generate
 const instaScene = new Scenes.WizardScene(
   'insta_scene',
   async (ctx) => {
@@ -46,17 +46,19 @@ const instaScene = new Scenes.WizardScene(
       const res = await axios.get(`https://ar-api-iauy.onrender.com/instastalk?username=${username}`);
       const data = res.data;
 
-      if (!data.success) {
+      if (!data || !data.success) {
         await ctx.reply('<b>Invalid Instagram username or not found.</b>', { parse_mode: 'HTML' });
         return await ctx.scene.leave();
       }
 
       const info = `<b>Is this the correct user?</b>\n\n` +
-        `• <b>Username:</b> ${data.username}\n` +
+        `• <b>Username:</b> ${data.username || 'N/A'}\n` +
         `• <b>Nickname:</b> ${data.full_name || 'N/A'}\n` +
-        `• <b>Followers:</b> ${data.follower_count}\n` +
-        `• <b>Following:</b> ${data.following_count}\n` +
+        `• <b>Followers:</b> ${data.follower_count || 'N/A'}\n` +
+        `• <b>Following:</b> ${data.following_count || 'N/A'}\n` +
         `• <b>Created At:</b> ${data.account_created || 'N/A'}`;
+
+      ctx.wizard.state.data.userInfo = info; // Store user info for later use
 
       await ctx.reply(info, {
         parse_mode: 'HTML',
@@ -70,7 +72,8 @@ const instaScene = new Scenes.WizardScene(
         }
       });
     } catch (err) {
-      await ctx.reply('<b>Unable to verify the username. The API might be down.</b>\n\nPlease try again later.', { parse_mode: 'HTML' });
+      console.error(`API error in method_generate: ${err.message}`, err.response ? err.response.data : 'No response data');
+      await ctx.reply('<b>Unable to verify the username. The API might be down or returned an unexpected response.</b>\n\nPlease try again later.', { parse_mode: 'HTML' });
       return await ctx.scene.leave();
     }
 
@@ -78,7 +81,7 @@ const instaScene = new Scenes.WizardScene(
   }
 );
 
-// Scene for Instagram Form Mass Report (with live count animation)
+// Scene for Instagram Form Mass Report (with live count in inline buttons)
 const formReportScene = new Scenes.WizardScene(
   'form_report_scene',
   async (ctx) => {
@@ -140,13 +143,46 @@ const formReportScene = new Scenes.WizardScene(
       console.error(`Form report error: ${err.message}`);
     }
 
-    // Progress bar animation with live counts
-    const loadingMsg = await ctx.reply('<b>Loading... Please wait.</b>', { parse_mode: 'HTML' });
+    // Progress bar animation with live counts in inline buttons
+    const loadingMsg = await ctx.reply('<b>Loading... 0%</b> ▒□□□□□□□□□', {
+      parse_mode: 'HTML',
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: '✅ Success: 0', callback_data: 'dummy_success' },
+            { text: '❌ Error: 0', callback_data: 'dummy_error' }
+          ]
+        ]
+      }
+    });
+
+    let successCount = 0;
+    let errorCount = 0;
+    const totalTarget = Math.floor(Math.random() * (200 - 50 + 1)) + 50; // Random total between 50 and 200
 
     for (let i = 10; i <= 100; i += 10) {
-      const bar = '▒'.repeat(i / 10) + ' '.repeat(10 - i / 10);
+      const bar = '▒'.repeat(i / 10) + '□'.repeat(10 - i / 10);
+
+      // Simulate live counting
+      if (i <= 90) { // Stop incrementing counts at 90% to finalize at 100%
+        const incrementSuccess = Math.floor(Math.random() * 5); // Random increment for success
+        const incrementError = Math.floor(Math.random() * 5);  // Random increment for error
+        successCount = Math.min(successCount + incrementSuccess, totalTarget);
+        errorCount = Math.min(errorCount + incrementError, totalTarget - successCount);
+      }
+
       try {
-        await ctx.telegram.editMessageText(ctx.chat.id, loadingMsg.message_id, null, `<b>Loading... ${i}%</b> ${bar}`, { parse_mode: 'HTML' });
+        await ctx.telegram.editMessageText(ctx.chat.id, loadingMsg.message_id, null, `<b>Loading... ${i}%</b> ${bar}`, {
+          parse_mode: 'HTML',
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: `✅ Success: ${successCount}`, callback_data: 'dummy_success' },
+                { text: `❌ Error: ${errorCount}`, callback_data: 'dummy_error' }
+              ]
+            ]
+          }
+        });
         await new Promise(r => setTimeout(r, 500));
       } catch {
         break;
@@ -156,20 +192,22 @@ const formReportScene = new Scenes.WizardScene(
     // Delete the progress bar message
     await ctx.telegram.deleteMessage(ctx.chat.id, loadingMsg.message_id);
 
-    // Generate random success/error counts (max 200 total)
-    const total = Math.floor(Math.random() * (200 - 50 + 1)) + 50; // Random total between 50 and 200
-    const successCount = Math.floor(Math.random() * total);
-    const errorCount = total - successCount;
-
+    // Final message with counts in inline buttons
     const finalText = `<i>Username: @${username}</i>\n\n` +
-      `<b>Status:</b>\n` +
-      `✅ Success: ${successCount}\n` +
-      `❌ Error: ${errorCount}\n` +
+      `<b>Form Mass Report Completed</b>\n` +
       `<blockquote>⚠️ <b>Note:</b> <i><a href="https://t.me/Peldiya">This method is based on available data and may not be fully accurate.</a></i></blockquote>`;
 
     await ctx.reply(finalText, {
       parse_mode: 'HTML',
-      reply_markup: { inline_keyboard: [[{ text: 'Contact Developer', url: 'tg://openmessage?user_id=7387793694' }]] }
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: `✅ Success: ${successCount}`, callback_data: 'dummy_success' },
+            { text: `❌ Error: ${errorCount}`, callback_data: 'dummy_error' }
+          ],
+          [{ text: 'Contact Developer', url: 'tg://openmessage?user_id=7387793694' }]
+        ]
+      }
     });
 
     return await ctx.scene.leave();
@@ -440,7 +478,7 @@ const ytReportScene = new Scenes.WizardScene(
   }
 );
 
-// Scene for Account Report (new feature)
+// Scene for Account Report (with live count in inline buttons)
 const accountReportScene = new Scenes.WizardScene(
   'account_report_scene',
   async (ctx) => {
@@ -474,16 +512,16 @@ const accountReportScene = new Scenes.WizardScene(
       const res = await axios.get(`https://ar-api-iauy.onrender.com/instastalk?username=${username}`);
       const data = res.data;
 
-      if (!data.success) {
+      if (!data || !data.success) {
         await ctx.reply('<b>Invalid Instagram username or not found.</b>', { parse_mode: 'HTML' });
         return await ctx.scene.leave();
       }
 
       const info = `<b>Is this the correct user?</b>\n\n` +
-        `• <b>Username:</b> ${data.username}\n` +
+        `• <b>Username:</b> ${data.username || 'N/A'}\n` +
         `• <b>Nickname:</b> ${data.full_name || 'N/A'}\n` +
-        `• <b>Followers:</b> ${data.follower_count}\n` +
-        `• <b>Following:</b> ${data.following_count}\n` +
+        `• <b>Followers:</b> ${data.follower_count || 'N/A'}\n` +
+        `• <b>Following:</b> ${data.following_count || 'N/A'}\n` +
         `• <b>Created At:</b> ${data.account_created || 'N/A'}`;
 
       ctx.wizard.state.data.userInfo = info; // Store user info for later use
@@ -500,7 +538,8 @@ const accountReportScene = new Scenes.WizardScene(
         }
       });
     } catch (err) {
-      await ctx.reply('<b>Unable to verify the username. The API might be down.</b>\n\nPlease try again later.', { parse_mode: 'HTML' });
+      console.error(`API error in account_report: ${err.message}`, err.response ? err.response.data : 'No response data');
+      await ctx.reply('<b>Unable to verify the username. The API might be down or returned an unexpected response.</b>\n\nPlease try again later.', { parse_mode: 'HTML' });
       return await ctx.scene.leave();
     }
 
@@ -781,8 +820,8 @@ bot.action('insta_info', checkChannels, async (ctx) => {
 
     try {
       const response = await axios.get(`https://ar-api-iauy.onrender.com/instastalk?username=${username}`);
-      if (response.status === 200) {
-        const data = response.data;
+      const data = response.data;
+      if (data && data.success) {
         let message = `*Instagram User Details*\n`;
         message += `-------------------------\n`;
         message += `👤 *User:* ${data.username || 'N/A'}\n`;
@@ -796,11 +835,11 @@ bot.action('insta_info', checkChannels, async (ctx) => {
         message += `-------------------------\n`;
         await ctx.reply(message, { parse_mode: 'Markdown' });
       } else {
-        await ctx.reply('⚠️ Failed to fetch user details.');
+        await ctx.reply('⚠️ Failed to fetch user details. Username may be invalid.');
       }
     } catch (err) {
-      await ctx.reply(`⚠️ Unable to fetch details. The API might be down. Please try again later.`);
-      console.error(`Insta info error: ${err.message}`);
+      console.error(`API error in insta_info: ${err.message}`, err.response ? err.response.data : 'No response data');
+      await ctx.reply(`⚠️ Unable to fetch details. The API might be down or returned an unexpected response. Please try again later.`);
     }
   };
 
@@ -841,7 +880,7 @@ bot.action('yt_report', checkChannels, async (ctx) => {
   await ctx.scene.enter('yt_report_scene');
 });
 
-// Method Generate callback (with live count animation)
+// Method Generate callback (with live count in inline buttons)
 bot.action(/^confirm_yes_(.+)$/, async (ctx) => {
   const username = ctx.match[1];
   await ctx.answerCbQuery();
@@ -849,12 +888,45 @@ bot.action(/^confirm_yes_(.+)$/, async (ctx) => {
   const confirmMsg = await ctx.editMessageText(`<b>Confirmed IG:</b> ${username}\n\nStarting report process...`, { parse_mode: 'HTML' });
   await ctx.telegram.deleteMessage(ctx.chat.id, confirmMsg.message_id);
 
-  const loadingMsg = await ctx.reply('<b>Loading... Please wait.</b>', { parse_mode: 'HTML' });
+  const loadingMsg = await ctx.reply('<b>Loading... 0%</b> ▒□□□□□□□□□', {
+    parse_mode: 'HTML',
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: '✅ Success: 0', callback_data: 'dummy_success' },
+          { text: '❌ Error: 0', callback_data: 'dummy_error' }
+        ]
+      ]
+    }
+  });
+
+  let successCount = 0;
+  let errorCount = 0;
+  const totalTarget = Math.floor(Math.random() * (200 - 50 + 1)) + 50; // Random total between 50 and 200
 
   for (let i = 10; i <= 100; i += 10) {
-    const bar = '▒'.repeat(i / 10) + ' '.repeat(10 - i / 10);
+    const bar = '▒'.repeat(i / 10) + '□'.repeat(10 - i / 10);
+
+    // Simulate live counting
+    if (i <= 90) { // Stop incrementing counts at 90% to finalize at 100%
+      const incrementSuccess = Math.floor(Math.random() * 5); // Random increment for success
+      const incrementError = Math.floor(Math.random() * 5);  // Random increment for error
+      successCount = Math.min(successCount + incrementSuccess, totalTarget);
+      errorCount = Math.min(errorCount + incrementError, totalTarget - successCount);
+    }
+
     try {
-      await ctx.telegram.editMessageText(ctx.chat.id, loadingMsg.message_id, null, `<b>Loading... ${i}%</b> ${bar}`, { parse_mode: 'HTML' });
+      await ctx.telegram.editMessageText(ctx.chat.id, loadingMsg.message_id, null, `<b>Loading... ${i}%</b> ${bar}`, {
+        parse_mode: 'HTML',
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: `✅ Success: ${successCount}`, callback_data: 'dummy_success' },
+              { text: `❌ Error: ${errorCount}`, callback_data: 'dummy_error' }
+            ]
+          ]
+        }
+      });
       await new Promise(r => setTimeout(r, 500));
     } catch {
       break;
@@ -864,20 +936,22 @@ bot.action(/^confirm_yes_(.+)$/, async (ctx) => {
   // Delete the progress bar message
   await ctx.telegram.deleteMessage(ctx.chat.id, loadingMsg.message_id);
 
-  // Generate random success/error counts (max 200 total)
-  const total = Math.floor(Math.random() * (200 - 50 + 1)) + 50; // Random total between 50 and 200
-  const successCount = Math.floor(Math.random() * total);
-  const errorCount = total - successCount;
-
+  // Final message with counts in inline buttons
   const finalText = `<i>Username: @${username}</i>\n\n` +
-    `<b>Status:</b>\n` +
-    `✅ Success: ${successCount}\n` +
-    `❌ Error: ${errorCount}\n` +
+    `<b>Method Generate Completed</b>\n` +
     `<blockquote>⚠️ <b>Note:</b> <i><a href="https://t.me/Peldiya">This method is based on available data and may not be fully accurate.</a></i></blockquote>`;
 
   await ctx.reply(finalText, {
     parse_mode: 'HTML',
-    reply_markup: { inline_keyboard: [[{ text: 'Contact Developer', url: 'tg://openmessage?user_id=7387793694' }]] }
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: `✅ Success: ${successCount}`, callback_data: 'dummy_success' },
+          { text: `❌ Error: ${errorCount}`, callback_data: 'dummy_error' }
+        ],
+        [{ text: 'Contact Developer', url: 'tg://openmessage?user_id=7387793694' }]
+      ]
+    }
   });
 });
 
@@ -887,7 +961,7 @@ bot.action('confirm_no', async (ctx) => {
   await ctx.scene.enter('insta_scene');
 });
 
-// Account Report callback (with live count animation)
+// Account Report callback (with live count in inline buttons)
 bot.action(/^account_confirm_yes_(.+)$/, async (ctx) => {
   const username = ctx.match[1];
   await ctx.answerCbQuery();
@@ -895,12 +969,45 @@ bot.action(/^account_confirm_yes_(.+)$/, async (ctx) => {
   const confirmMsg = await ctx.editMessageText(`<b>Confirmed IG:</b> ${username}\n\nProcessing account report...`, { parse_mode: 'HTML' });
   await ctx.telegram.deleteMessage(ctx.chat.id, confirmMsg.message_id);
 
-  const loadingMsg = await ctx.reply('<b>Loading... Please wait.</b>', { parse_mode: 'HTML' });
+  const loadingMsg = await ctx.reply('<b>Loading... 0%</b> ▒□□□□□□□□□', {
+    parse_mode: 'HTML',
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: '✅ Success: 0', callback_data: 'dummy_success' },
+          { text: '❌ Error: 0', callback_data: 'dummy_error' }
+        ]
+      ]
+    }
+  });
+
+  let successCount = 0;
+  let errorCount = 0;
+  const totalTarget = Math.floor(Math.random() * (200 - 50 + 1)) + 50; // Random total between 50 and 200
 
   for (let i = 10; i <= 100; i += 10) {
-    const bar = '▒'.repeat(i / 10) + ' '.repeat(10 - i / 10);
+    const bar = '▒'.repeat(i / 10) + '□'.repeat(10 - i / 10);
+
+    // Simulate live counting
+    if (i <= 90) { // Stop incrementing counts at 90% to finalize at 100%
+      const incrementSuccess = Math.floor(Math.random() * 5); // Random increment for success
+      const incrementError = Math.floor(Math.random() * 5);  // Random increment for error
+      successCount = Math.min(successCount + incrementSuccess, totalTarget);
+      errorCount = Math.min(errorCount + incrementError, totalTarget - successCount);
+    }
+
     try {
-      await ctx.telegram.editMessageText(ctx.chat.id, loadingMsg.message_id, null, `<b>Loading... ${i}%</b> ${bar}`, { parse_mode: 'HTML' });
+      await ctx.telegram.editMessageText(ctx.chat.id, loadingMsg.message_id, null, `<b>Loading... ${i}%</b> ${bar}`, {
+        parse_mode: 'HTML',
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: `✅ Success: ${successCount}`, callback_data: 'dummy_success' },
+              { text: `❌ Error: ${errorCount}`, callback_data: 'dummy_error' }
+            ]
+          ]
+        }
+      });
       await new Promise(r => setTimeout(r, 500));
     } catch {
       break;
@@ -915,12 +1022,21 @@ bot.action(/^account_confirm_yes_(.+)$/, async (ctx) => {
   try {
     const res = await axios.get(`https://ar-api-iauy.onrender.com/instastalk?username=${username}`);
     const data = res.data;
-    userInfo = `• <b>Username:</b> ${data.username}\n` +
-      `• <b>Nickname:</b> ${data.full_name || 'N/A'}\n` +
-      `• <b>Followers:</b> ${data.follower_count}\n` +
-      `• <b>Following:</b> ${data.following_count}\n` +
-      `• <b>Created At:</b> ${data.account_created || 'N/A'}`;
+    if (data && data.success) {
+      userInfo = `• <b>Username:</b> ${data.username || 'N/A'}\n` +
+        `• <b>Nickname:</b> ${data.full_name || 'N/A'}\n` +
+        `• <b>Followers:</b> ${data.follower_count || 'N/A'}\n` +
+        `• <b>Following:</b> ${data.following_count || 'N/A'}\n` +
+        `• <b>Created At:</b> ${data.account_created || 'N/A'}`;
+    } else {
+      userInfo = `• <b>Username:</b> ${username}\n` +
+        `• <b>Nickname:</b> N/A\n` +
+        `• <b>Followers:</b> N/A\n` +
+        `• <b>Following:</b> N/A\n` +
+        `• <b>Created At:</b> N/A`;
+    }
   } catch (err) {
+    console.error(`API error in account_report final fetch: ${err.message}`, err.response ? err.response.data : 'No response data');
     userInfo = `• <b>Username:</b> ${username}\n` +
       `• <b>Nickname:</b> N/A\n` +
       `• <b>Followers:</b> N/A\n` +
@@ -928,16 +1044,8 @@ bot.action(/^account_confirm_yes_(.+)$/, async (ctx) => {
       `• <b>Created At:</b> N/A`;
   }
 
-  // Generate random success/error counts (max 200 total)
-  const total = Math.floor(Math.random() * (200 - 50 + 1)) + 50; // Random total between 50 and 200
-  const successCount = Math.floor(Math.random() * total);
-  const errorCount = total - successCount;
-
   const finalText = `<b>Account Report for @${username}</b>\n\n` +
     `${userInfo}\n\n` +
-    `<b>Status:</b>\n` +
-    `✅ Success: ${successCount}\n` +
-    `❌ Error: ${errorCount}\n` +
     `<blockquote>⚠️ <b>Note:</b> <i><a href="https://t.me/Peldiya">This method is based on available data and may not be fully accurate.</a></i></blockquote>`;
 
   await ctx.reply(finalText, {
@@ -960,7 +1068,7 @@ bot.action('account_confirm_no', async (ctx) => {
   await ctx.scene.enter('account_report_scene');
 });
 
-// Dummy callbacks for success/error buttons (to prevent "callback query not found" errors)
+// Dummy callbacks for success/error buttons
 bot.action('dummy_success', async (ctx) => {
   await ctx.answerCbQuery();
 });
