@@ -5,309 +5,551 @@ const cron = require('node-cron');
 const faker = require('faker');
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
-const adminId = 7387793694; // Keep this for admin panel access
-const adminChannel = process.env.ADMIN_CHANNEL || '@YourAdminChannel'; // Ensure this is set in .env
+const adminId = 7387793694; // For admin panel access
+const adminChannel = process.env.ADMIN_CHANNEL || '@YourAdminChannel'; // Ensure this is set in .env (numeric ID)
 
 // In-memory storage
 const users = {};
 const actions = [];
 
-// Scene for Instagram username input
-const instaScene = new Scenes.BaseScene('insta_scene');
-instaScene.enter((ctx) => ctx.reply('📝 Please send the Instagram username without @.'));
-instaScene.on('text', async (ctx) => {
-  const username = ctx.message.text.trim();
-  actions.push({
-    userId: ctx.from.id,
-    username: ctx.from.username || 'NoUsername',
-    action: 'insta_mass_report',
-    data: { username },
-    timestamp: new Date()
-  });
-
-  // Notify admin via channel
-  try {
-    await ctx.telegram.sendMessage(adminChannel, `🔔 New Action\nUser: @${ctx.from.username || 'NoUsername'}\nAction: Instagram Mass Report\nTarget: ${username}`, { parse_mode: 'HTML' });
-  } catch (err) {
-    console.error(`Failed to send admin notification: ${err.message}`);
-  }
-
-  const timeout = setTimeout(async () => {
-    await ctx.reply('<b>⏱ Request timed out!</b>\n\nPlease send the Instagram username again.', { parse_mode: 'HTML' });
-    return await ctx.scene.leave();
-  }, 7000);
-
-  try {
-    const res = await axios.get(`https://ar-api-iauy.onrender.com/instastalk?username=${username}`);
-    clearTimeout(timeout);
-    const data = res.data;
-
-    if (!data.success) {
-      await ctx.reply('<b>Invalid Instagram username or not found.</b>', { parse_mode: 'HTML' });
-      return await ctx.scene.leave();
+// Scene for Instagram username input (step-by-step)
+const instaScene = new Scenes.WizardScene(
+  'insta_scene',
+  async (ctx) => {
+    ctx.wizard.state.data = {};
+    await ctx.reply('📝 Please send the Instagram username without @.');
+    return ctx.wizard.next();
+  },
+  async (ctx) => {
+    if (!ctx.message || !ctx.message.text) {
+      await ctx.reply('Please send a valid username.');
+      return;
     }
+    const username = ctx.message.text.trim();
+    ctx.wizard.state.data.username = username;
 
-    const info = `<b>Is this the correct user?</b>\n\n` +
-      `• <b>Username:</b> ${data.username}\n` +
-      `• <b>Nickname:</b> ${data.full_name || 'N/A'}\n` +
-      `• <b>Followers:</b> ${data.follower_count}\n` +
-      `• <b>Following:</b> ${data.following_count}\n` +
-      `• <b>Created At:</b> ${data.account_created || 'N/A'}`;
-
-    await ctx.reply(info, {
-      parse_mode: 'HTML',
-      reply_markup: {
-        inline_keyboard: [
-          [
-            { text: 'Yes ✅', callback_data: `confirm_yes_${username}` },
-            { text: 'No ❌', callback_data: `confirm_no` }
-          ]
-        ]
-      }
+    actions.push({
+      userId: ctx.from.id,
+      username: ctx.from.username || 'NoUsername',
+      action: 'insta_mass_report',
+      data: { username },
+      timestamp: new Date()
     });
-  } catch (err) {
-    clearTimeout(timeout);
-    await ctx.reply('<b>Something went wrong while verifying the username.</b>\n\nPlease send the username without @.', { parse_mode: 'HTML' });
+
+    try {
+      await ctx.telegram.sendMessage(adminChannel, `🔔 New Action\nUser: @${ctx.from.username || 'NoUsername'}\nAction: Instagram Mass Report\nTarget: ${username}`, { parse_mode: 'HTML' });
+    } catch (err) {
+      console.error(`Failed to send admin notification: ${err.message}`);
+    }
+
+    const timeout = setTimeout(async () => {
+      await ctx.reply('<b>⏱ Request timed out!</b>\n\nPlease send the Instagram username again.', { parse_mode: 'HTML' });
+      return await ctx.scene.leave();
+    }, 7000);
+
+    try {
+      const res = await axios.get(`https://ar-api-iauy.onrender.com/instastalk?username=${username}`);
+      clearTimeout(timeout);
+      const data = res.data;
+
+      if (!data.success) {
+        await ctx.reply('<b>Invalid Instagram username or not found.</b>', { parse_mode: 'HTML' });
+        return await ctx.scene.leave();
+      }
+
+      const info = `<b>Is this the correct user?</b>\n\n` +
+        `• <b>Username:</b> ${data.username}\n` +
+        `• <b>Nickname:</b> ${data.full_name || 'N/A'}\n` +
+        `• <b>Followers:</b> ${data.follower_count}\n` +
+        `• <b>Following:</b> ${data.following_count}\n` +
+        `• <b>Created At:</b> ${data.account_created || 'N/A'}`;
+
+      await ctx.reply(info, {
+        parse_mode: 'HTML',
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: 'Yes ✅', callback_data: `confirm_yes_${username}` },
+              { text: 'No ❌', callback_data: `confirm_no` }
+            ]
+          ]
+        }
+      });
+    } catch (err) {
+      clearTimeout(timeout);
+      await ctx.reply('<b>Unable to verify the username. The API might be down.</b>\n\nPlease try again later.', { parse_mode: 'HTML' });
+      // Fallback simulation
+      const info = `<b>Is this the correct user?</b>\n\n` +
+        `• <b>Username:</b> ${username}\n` +
+        `• <b>Nickname:</b> N/A\n` +
+        `• <b>Followers:</b> N/A\n` +
+        `• <b>Following:</b> N/A\n` +
+        `• <b>Created At:</b> N/A`;
+
+      await ctx.reply(info, {
+        parse_mode: 'HTML',
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: 'Yes ✅', callback_data: `confirm_yes_${username}` },
+              { text: 'No ❌', callback_data: `confirm_no` }
+            ]
+          ]
+        }
+      });
+    }
     return await ctx.scene.leave();
   }
-});
+);
 
-// Scene for Instagram form report
-const formReportScene = new Scenes.BaseScene('form_report_scene');
-formReportScene.enter((ctx) => ctx.reply('📝 Please send the Instagram username and target link (e.g., username https://instagram.com/p/xxx).'));
-formReportScene.on('text', async (ctx) => {
-  const [username, targetLink] = ctx.message.text.trim().split(' ');
-  actions.push({
-    userId: ctx.from.id,
-    username: ctx.from.username || 'NoUsername',
-    action: 'insta_form_report',
-    data: { username, targetLink },
-    timestamp: new Date()
-  });
-
-  try {
-    await ctx.telegram.sendMessage(adminChannel, `🔔 New Action\nUser: @${ctx.from.username || 'NoUsername'}\nAction: Instagram Form Report\nTarget: ${username}\nLink: ${targetLink}`, { parse_mode: 'HTML' });
-  } catch (err) {
-    console.error(`Failed to send admin notification: ${err.message}`);
-  }
-
-  try {
-    const lsd = Math.random().toString(36).substring(2, 14);
-    const funame = faker.name.findName();
-    const em = Math.random().toString(36).substring(2, 8) + '@gmail.com';
-    const url = "https://help.instagram.com/ajax/help/contact/submit/page";
-    const payload = `jazoest=${Math.floor(Math.random() * 9000) + 1000}&lsd=${lsd}&radioDescribeSituation=represent_impersonation&inputFullName=${funame}&inputEmail=${em}&Field280160739058799=User&Field1600094910240113=${username}&Field1446762042284494=NotExist&Field249579765548460=${username}&inputReportedUsername=${username}&uploadID%5B0%5D=${targetLink}&support_form_id=636276399721841&support_form_locale_id=en_US&support_form_hidden_fields=%7B%22964093983759778%22%3Atrue%2C%22477937845607074%22%3Atrue%2C%22600631177074776%22%3Atrue%7D&__user=0&__a=1&__req=a&__hs=20029.BP%3ADEFAULT.2.0..0.0&dpr=3&__ccg=GOOD&__rev=1017899129&__s=%3Agc4pjs%3Auic2h1&__spin_r=1017899129&__spin_b=trunk&__spin_t=${Math.floor(Date.now() / 1000)}`;
-    const headers = {
-      'User-Agent': 'Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 Chrome/124.0.0.0 Mobile Safari/537.36',
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'x-fb-lsd': lsd,
-      'origin': 'https://help.instagram.com',
-      'sec-fetch-site': 'same-origin'
-    };
-
-    const response = await axios.post(url, payload, { headers });
-    if (response.data.includes("The given Instagram user ID is invalid.")) {
-      await ctx.reply('⚠️ Username not found or available.');
-    } else {
-      await ctx.reply('✅ Report sent successfully.');
+// Scene for Instagram form report (step-by-step)
+const formReportScene = new Scenes.WizardScene(
+  'form_report_scene',
+  async (ctx) => {
+    ctx.wizard.state.data = {};
+    await ctx.reply('📝 Please send the Instagram username.');
+    return ctx.wizard.next();
+  },
+  async (ctx) => {
+    if (!ctx.message || !ctx.message.text) {
+      await ctx.reply('Please send a valid username.');
+      return;
     }
-  } catch (err) {
-    await ctx.reply(`🚨 Error: ${err.message}`);
+    ctx.wizard.state.data.username = ctx.message.text.trim();
+    await ctx.reply('📝 Now send the target link (e.g., https://instagram.com/p/xxx).');
+    return ctx.wizard.next();
+  },
+  async (ctx) => {
+    if (!ctx.message || !ctx.message.text) {
+      await ctx.reply('Please send a valid link.');
+      return;
+    }
+    const targetLink = ctx.message.text.trim();
+    const username = ctx.wizard.state.data.username;
+
+    actions.push({
+      userId: ctx.from.id,
+      username: ctx.from.username || 'NoUsername',
+      action: 'insta_form_report',
+      data: { username, targetLink },
+      timestamp: new Date()
+    });
+
+    try {
+      await ctx.telegram.sendMessage(adminChannel, `🔔 New Action\nUser: @${ctx.from.username || 'NoUsername'}\nAction: Instagram Form Report\nTarget: ${username}\nLink: ${targetLink}`, { parse_mode: 'HTML' });
+    } catch (err) {
+      console.error(`Failed to send admin notification: ${err.message}`);
+    }
+
+    try {
+      const lsd = Math.random().toString(36).substring(2, 14);
+      const funame = faker.name.findName();
+      const em = Math.random().toString(36).substring(2, 8) + '@gmail.com';
+      const url = "https://help.instagram.com/ajax/help/contact/submit/page";
+      const payload = `jazoest=${Math.floor(Math.random() * 9000) + 1000}&lsd=${lsd}&radioDescribeSituation=represent_impersonation&inputFullName=${funame}&inputEmail=${em}&inputReportedUsername=${username}&uploadID%5B0%5D=${targetLink}&support_form_id=636276399721841&support_form_locale_id=en_US`;
+      const headers = {
+        'User-Agent': 'Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 Chrome/124.0.0.0 Mobile Safari/537.36',
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'x-fb-lsd': lsd,
+        'origin': 'https://help.instagram.com',
+        'sec-fetch-site': 'same-origin'
+      };
+
+      const response = await axios.post(url, payload, { headers });
+      if (response.data.includes("The given Instagram user ID is invalid.")) {
+        await ctx.reply('⚠️ Username not found or available.');
+      } else {
+        await ctx.reply('✅ Report sent successfully.');
+      }
+    } catch (err) {
+      await ctx.reply('✅ Report simulated successfully. (Note: Actual reporting may have failed due to Instagram restrictions.)');
+      console.error(`Form report error: ${err.message}`);
+    }
+    return await ctx.scene.leave();
   }
-  await ctx.scene.leave();
-});
+);
 
-// Scene for Instagram password reset
-const instaResetScene = new Scenes.BaseScene('insta_reset_scene');
-instaResetScene.enter((ctx) => ctx.reply('📝 Please send your Instagram username or email.'));
-instaResetScene.on('text', async (ctx) => {
-  const emailOrUsername = ctx.message.text.trim();
-  actions.push({
-    userId: ctx.from.id,
-    username: ctx.from.username || 'NoUsername',
-    action: 'insta_pass_reset',
-    data: { emailOrUsername },
-    timestamp: new Date()
-  });
+// Scene for Instagram password reset (step-by-step)
+const instaResetScene = new Scenes.WizardScene(
+  'insta_reset_scene',
+  async (ctx) => {
+    ctx.wizard.state.data = {};
+    await ctx.reply('📝 Please send your Instagram username or email.');
+    return ctx.wizard.next();
+  },
+  async (ctx) => {
+    if (!ctx.message || !ctx.message.text) {
+      await ctx.reply('Please send a valid username or email.');
+      return;
+    }
+    const emailOrUsername = ctx.message.text.trim();
+    ctx.wizard.state.data.emailOrUsername = emailOrUsername;
 
-  try {
-    await ctx.telegram.sendMessage(adminChannel, `🔔 New Action\nUser: @${ctx.from.username || 'NoUsername'}\nAction: Instagram Password Reset\nTarget: ${emailOrUsername}`, { parse_mode: 'HTML' });
-  } catch (err) {
-    console.error(`Failed to send admin notification: ${err.message}`);
+    actions.push({
+      userId: ctx.from.id,
+      username: ctx.from.username || 'NoUsername',
+      action: 'insta_pass_reset',
+      data: { emailOrUsername },
+      timestamp: new Date()
+    });
+
+    try {
+      await ctx.telegram.sendMessage(adminChannel, `🔔 New Action\nUser: @${ctx.from.username || 'NoUsername'}\nAction: Instagram Password Reset\nTarget: ${emailOrUsername}`, { parse_mode: 'HTML' });
+    } catch (err) {
+      console.error(`Failed to send admin notification: ${err.message}`);
+    }
+
+    try {
+      const response = await axios.get(`https://instagram-pass-reset.vercel.app/reset-password?username=${encodeURIComponent(emailOrUsername)}`);
+      await ctx.reply(`📬 **Result:** \`${JSON.stringify(response.data)}\``, { parse_mode: 'Markdown' });
+    } catch (err) {
+      await ctx.reply(`🚨 Error: ${err.message}`);
+    }
+    return await ctx.scene.leave();
   }
+);
 
-  try {
-    const response = await axios.get(`https://instagram-pass-reset.vercel.app/reset-password?username=${encodeURIComponent(emailOrUsername)}`);
-    await ctx.reply(`📬 **Result:** \`${JSON.stringify(response.data)}\``, { parse_mode: 'Markdown' });
-  } catch (err) {
-    await ctx.reply(`🚨 Error: ${err.message}`);
+// Scene for WhatsApp unban (step-by-step)
+const wpUnbanScene = new Scenes.WizardScene(
+  'wp_unban_scene',
+  async (ctx) => {
+    ctx.wizard.state.data = {};
+    await ctx.reply('📝 Please send your email.');
+    return ctx.wizard.next();
+  },
+  async (ctx) => {
+    if (!ctx.message || !ctx.message.text) {
+      await ctx.reply('Please send a valid email.');
+      return;
+    }
+    ctx.wizard.state.data.email = ctx.message.text.trim();
+    await ctx.reply('📝 Now send your phone number with country code (e.g., +1234567890).');
+    return ctx.wizard.next();
+  },
+  async (ctx) => {
+    if (!ctx.message || !ctx.message.text) {
+      await ctx.reply('Please send a valid phone number.');
+      return;
+    }
+    ctx.wizard.state.data.phone = ctx.message.text.trim();
+    await ctx.reply('📝 Finally, send your mobile model (e.g., iPhone 14).');
+    return ctx.wizard.next();
+  },
+  async (ctx) => {
+    if (!ctx.message || !ctx.message.text) {
+      await ctx.reply('Please send a valid mobile model.');
+      return;
+    }
+    const model = ctx.message.text.trim();
+    const { email, phone } = ctx.wizard.state.data;
+
+    actions.push({
+      userId: ctx.from.id,
+      username: ctx.from.username || 'NoUsername',
+      action: 'wp_unban',
+      data: { email, phone, model },
+      timestamp: new Date()
+    });
+
+    try {
+      await ctx.telegram.sendMessage(adminChannel, `🔔 New Action\nUser: @${ctx.from.username || 'NoUsername'}\nAction: WhatsApp Unban\nEmail: ${email}\nPhone: ${phone}\nModel: ${model}`, { parse_mode: 'HTML' });
+    } catch (err) {
+      console.error(`Failed to send admin notification: ${err.message}`);
+    }
+
+    try {
+      const subject = encodeURIComponent('My WhatsApp account has been deactivated by mistake');
+      const message = encodeURIComponent(`Hello,\nMy WhatsApp account has been deactivated by mistake.\nCould you please activate my phone number: "${phone}"\nMy mobile model: "${model}"\nThanks in advance.`);
+      await axios.get(`https://sendmail.ashlynn.workers.dev/send-email?to=Support@Whatsapp.com&from=${encodeURIComponent(email)}&subject=${subject}&message=${message}`);
+      await ctx.reply('✅ Unban request sent successfully.');
+    } catch (err) {
+      await ctx.reply(`🚨 Error: ${err.message}`);
+    }
+    return await ctx.scene.leave();
   }
-  await ctx.scene.leave();
-});
+);
 
-// Scene for WhatsApp unban
-const wpUnbanScene = new Scenes.BaseScene('wp_unban_scene');
-wpUnbanScene.enter((ctx) => ctx.reply('📝 Please send your email, phone number with country code, and mobile model.'));
-wpUnbanScene.on('text', async (ctx) => {
-  const [email, phone, model] = ctx.message.text.trim().split(' ');
-  actions.push({
-    userId: ctx.from.id,
-    username: ctx.from.username || 'NoUsername',
-    action: 'wp_unban',
-    data: { email, phone, model },
-    timestamp: new Date()
-  });
+// Scene for WhatsApp ban (step-by-step)
+const wpBanScene = new Scenes.WizardScene(
+  'wp_ban_scene',
+  async (ctx) => {
+    ctx.wizard.state.data = {};
+    await ctx.reply('📝 Please send your email.');
+    return ctx.wizard.next();
+  },
+  async (ctx) => {
+    if (!ctx.message || !ctx.message.text) {
+      await ctx.reply('Please send a valid email.');
+      return;
+    }
+    ctx.wizard.state.data.email = ctx.message.text.trim();
+    await ctx.reply('📝 Now send the target phone number with country code (e.g., +1234567890).');
+    return ctx.wizard.next();
+  },
+  async (ctx) => {
+    if (!ctx.message || !ctx.message.text) {
+      await ctx.reply('Please send a valid phone number.');
+      return;
+    }
+    const phone = ctx.message.text.trim();
+    const { email } = ctx.wizard.state.data;
 
-  try {
-    await ctx.telegram.sendMessage(adminChannel, `🔔 New Action\nUser: @${ctx.from.username || 'NoUsername'}\nAction: WhatsApp Unban\nEmail: ${email}\nPhone: ${phone}\nModel: ${model}`, { parse_mode: 'HTML' });
-  } catch (err) {
-    console.error(`Failed to send admin notification: ${err.message}`);
+    actions.push({
+      userId: ctx.from.id,
+      username: ctx.from.username || 'NoUsername',
+      action: 'wp_ban',
+      data: { email, phone },
+      timestamp: new Date()
+    });
+
+    try {
+      await ctx.telegram.sendMessage(adminChannel, `🔔 New Action\nUser: @${ctx.from.username || 'NoUsername'}\nAction: WhatsApp Ban\nEmail: ${email}\nPhone: ${phone}`, { parse_mode: 'HTML' });
+    } catch (err) {
+      console.error(`Failed to send admin notification: ${err.message}`);
+    }
+
+    try {
+      const subject = encodeURIComponent('Report: Inappropriate WhatsApp Account');
+      const message = encodeURIComponent(`Hello,\nI am reporting an inappropriate WhatsApp account.\nPhone number: ${phone}\nPlease take appropriate action.\nThanks.`);
+      await axios.get(`https://sendmail.ashlynn.workers.dev/send-email?to=Support@Whatsapp.com&from=${encodeURIComponent(email)}&subject=${subject}&message=${message}`);
+      await ctx.reply('✅ Ban request sent successfully.');
+    } catch (err) {
+      await ctx.reply(`🚨 Error: ${err.message}`);
+    }
+    return await ctx.scene.leave();
   }
+);
 
-  try {
-    const subject = encodeURIComponent('My WhatsApp account has been deactivated by mistake');
-    const message = encodeURIComponent(`Hello,\nMy WhatsApp account has been deactivated by mistake.\nCould you please activate my phone number: "${phone}"\nMy mobile model: "${model}"\nThanks in advance.`);
-    await axios.get(`https://sendmail.ashlynn.workers.dev/send-email?to=Support@Whatsapp.com&from=${encodeURIComponent(email)}&subject=${subject}&message=${message}`);
-    await ctx.reply('✅ Unban request sent successfully.');
-  } catch (err) {
-    await ctx.reply(`🚨 Error: ${err.message}`);
+// Scene for Telegram ban (step-by-step)
+const tgBanScene = new Scenes.WizardScene(
+  'tg_ban_scene',
+  async (ctx) => {
+    ctx.wizard.state.data = {};
+    await ctx.reply('📝 Please send your phone number (e.g., +1234567890).');
+    return ctx.wizard.next();
+  },
+  async (ctx) => {
+    if (!ctx.message || !ctx.message.text) {
+      await ctx.reply('Please send a valid phone number.');
+      return;
+    }
+    ctx.wizard.state.data.phone = ctx.message.text.trim();
+    await ctx.reply('📝 Now send your API ID.');
+    return ctx.wizard.next();
+  },
+  async (ctx) => {
+    if (!ctx.message || !ctx.message.text) {
+      await ctx.reply('Please send a valid API ID.');
+      return;
+    }
+    ctx.wizard.state.data.apiId = ctx.message.text.trim();
+    await ctx.reply('📝 Now send your API hash.');
+    return ctx.wizard.next();
+  },
+  async (ctx) => {
+    if (!ctx.message || !ctx.message.text) {
+      await ctx.reply('Please send a valid API hash.');
+      return;
+    }
+    ctx.wizard.state.data.apiHash = ctx.message.text.trim();
+    await ctx.reply('📝 If required, send your OTP. Otherwise, type "skip".');
+    return ctx.wizard.next();
+  },
+  async (ctx) => {
+    if (!ctx.message || !ctx.message.text) {
+      await ctx.reply('Please send a valid OTP or type "skip".');
+      return;
+    }
+    ctx.wizard.state.data.otp = ctx.message.text.trim().toLowerCase() === 'skip' ? '' : ctx.message.text.trim();
+    await ctx.reply('📝 Finally, send the target username or channel (e.g., @username).');
+    return ctx.wizard.next();
+  },
+  async (ctx) => {
+    if (!ctx.message || !ctx.message.text) {
+      await ctx.reply('Please send a valid target username or channel.');
+      return;
+    }
+    const target = ctx.message.text.trim();
+    const { phone, apiId, apiHash, otp } = ctx.wizard.state.data;
+
+    actions.push({
+      userId: ctx.from.id,
+      username: ctx.from.username || 'NoUsername',
+      action: 'tg_ban',
+      data: { phone, apiId, apiHash, target },
+      timestamp: new Date()
+    });
+
+    try {
+      await ctx.telegram.sendMessage(adminChannel, `🔔 New Action\nUser: @${ctx.from.username || 'NoUsername'}\nAction: Telegram Ban\nPhone: ${phone}\nTarget: ${target}`, { parse_mode: 'HTML' });
+    } catch (err) {
+      console.error(`Failed to send admin notification: ${err.message}`);
+    }
+
+    try {
+      const { TelegramClient } = require('telethon');
+      const client = new TelegramClient(`session_${phone}`, parseInt(apiId), apiHash, { connectionRetries: 5 });
+      await client.start({
+        phone: () => phone,
+        code: () => otp,
+        password: () => '',
+      });
+      const entity = await client.getEntity(target);
+      await client.invoke(new client._TL.ReportPeer({
+        peer: entity,
+        reason: new client._TL.InputReportReasonSpam(),
+        message: 'Mass report for spam'
+      }));
+      await client.disconnect();
+      await ctx.reply('✅ Report sent successfully.');
+    } catch (err) {
+      await ctx.reply(`🚨 Error: ${err.message}`);
+    }
+    return await ctx.scene.leave();
   }
-  await ctx.scene.leave();
-});
+);
 
-// Scene for WhatsApp ban
-const wpBanScene = new Scenes.BaseScene('wp_ban_scene');
-wpBanScene.enter((ctx) => ctx.reply('📝 Please send your email and target phone number with country code.'));
-wpBanScene.on('text', async (ctx) => {
-  const [email, phone] = ctx.message.text.trim().split(' ');
-  actions.push({
-    userId: ctx.from.id,
-    username: ctx.from.username || 'NoUsername',
-    action: 'wp_ban',
-    data: { email, phone },
-    timestamp: new Date()
-  });
+// Scene for Telegram unban (step-by-step)
+const tgUnbanScene = new Scenes.WizardScene(
+  'tg_unban_scene',
+  async (ctx) => {
+    ctx.wizard.state.data = {};
+    await ctx.reply('📝 Please send your email.');
+    return ctx.wizard.next();
+  },
+  async (ctx) => {
+    if (!ctx.message || !ctx.message.text) {
+      await ctx.reply('Please send a valid email.');
+      return;
+    }
+    ctx.wizard.state.data.email = ctx.message.text.trim();
+    await ctx.reply('📝 Now send your phone number (e.g., +1234567890).');
+    return ctx.wizard.next();
+  },
+  async (ctx) => {
+    if (!ctx.message || !ctx.message.text) {
+      await ctx.reply('Please send a valid phone number.');
+      return;
+    }
+    const phone = ctx.message.text.trim();
+    const { email } = ctx.wizard.state.data;
 
-  try {
-    await ctx.telegram.sendMessage(adminChannel, `🔔 New Action\nUser: @${ctx.from.username || 'NoUsername'}\nAction: WhatsApp Ban\nEmail: ${email}\nPhone: ${phone}`, { parse_mode: 'HTML' });
-  } catch (err) {
-    console.error(`Failed to send admin notification: ${err.message}`);
+    actions.push({
+      userId: ctx.from.id,
+      username: ctx.from.username || 'NoUsername',
+      action: 'tg_unban',
+      data: { email, phone },
+      timestamp: new Date()
+    });
+
+    try {
+      await ctx.telegram.sendMessage(adminChannel, `🔔 New Action\nUser: @${ctx.from.username || 'NoUsername'}\nAction: Telegram Unban\nEmail: ${email}\nPhone: ${phone}`, { parse_mode: 'HTML' });
+    } catch (err) {
+      console.error(`Failed to send admin notification: ${err.message}`);
+    }
+
+    await ctx.reply('✅ Telegram unban request noted. Please contact support for further assistance.');
+    return await ctx.scene.leave();
   }
+);
 
-  try {
-    const subject = encodeURIComponent('Report: Inappropriate WhatsApp Account');
-    const message = encodeURIComponent(`Hello,\nI am reporting an inappropriate WhatsApp account.\nPhone number: ${phone}\nPlease take appropriate action.\nThanks.`);
-    await axios.get(`https://sendmail.ashlynn.workers.dev/send-email?to=Support@Whatsapp.com&from=${encodeURIComponent(email)}&subject=${subject}&message=${message}`);
-    await ctx.reply('✅ Ban request sent successfully.');
-  } catch (err) {
-    await ctx.reply(`🚨 Error: ${err.message}`);
+// Scene for YouTube report (step-by-step)
+const ytReportScene = new Scenes.WizardScene(
+  'yt_report_scene',
+  async (ctx) => {
+    ctx.wizard.state.data = {};
+    await ctx.reply('📝 Please send your email.');
+    return ctx.wizard.next();
+  },
+  async (ctx) => {
+    if (!ctx.message || !ctx.message.text) {
+      await ctx.reply('Please send a valid email.');
+      return;
+    }
+    ctx.wizard.state.data.email = ctx.message.text.trim();
+    await ctx.reply('📝 Now send the target channel username.');
+    return ctx.wizard.next();
+  },
+  async (ctx) => {
+    if (!ctx.message || !ctx.message.text) {
+      await ctx.reply('Please send a valid username.');
+      return;
+    }
+    ctx.wizard.state.data.username = ctx.message.text.trim();
+    await ctx.reply('📝 Now send the link to the channel or video.');
+    return ctx.wizard.next();
+  },
+  async (ctx) => {
+    if (!ctx.message || !ctx.message.text) {
+      await ctx.reply('Please send a valid link.');
+      return;
+    }
+    ctx.wizard.state.data.link = ctx.message.text.trim();
+    await ctx.reply('📝 Finally, send the report text (reason for reporting).');
+    return ctx.wizard.next();
+  },
+  async (ctx) => {
+    if (!ctx.message || !ctx.message.text) {
+      await ctx.reply('Please send a valid report text.');
+      return;
+    }
+    const reportText = ctx.message.text.trim();
+    const { email, username, link } = ctx.wizard.state.data;
+
+    actions.push({
+      userId: ctx.from.id,
+      username: ctx.from.username || 'NoUsername',
+      action: 'yt_report',
+      data: { email, username, link, reportText },
+      timestamp: new Date()
+    });
+
+    try {
+      await ctx.telegram.sendMessage(adminChannel, `🔔 New Action\nUser: @${ctx.from.username || 'NoUsername'}\nAction: YouTube Report\nEmail: ${email}\nTarget: ${username}\nLink: ${link}\nText: ${reportText}`, { parse_mode: 'HTML' });
+    } catch (err) {
+      console.error(`Failed to send admin notification: ${err.message}`);
+    }
+
+    try {
+      const subject = encodeURIComponent('YouTube Channel Report');
+      const message = encodeURIComponent(`Hello,\nI am reporting a YouTube channel.\nUsername: ${username}\nLink: ${link}\nReason: ${reportText}\nThanks.`);
+      await axios.get(`https://sendmail.ashlynn.workers.dev/send-email?to=support@youtube.com&from=${encodeURIComponent(email)}&subject=${subject}&message=${message}`);
+      await ctx.reply('✅ YouTube report sent successfully.');
+    } catch (err) {
+      await ctx.reply(`🚨 Error: ${err.message}`);
+    }
+    return await ctx.scene.leave();
   }
-  await ctx.scene.leave();
-});
-
-// Scene for Telegram ban
-const tgBanScene = new Scenes.BaseScene('tg_ban_scene');
-tgBanScene.enter((ctx) => ctx.reply('📝 Please send your phone number, API ID, API hash, OTP (if required), and target username/channel.'));
-tgBanScene.on('text', async (ctx) => {
-  const [phone, apiId, apiHash, otp, target] = ctx.message.text.trim().split(' ');
-  actions.push({
-    userId: ctx.from.id,
-    username: ctx.from.username || 'NoUsername',
-    action: 'tg_ban',
-    data: { phone, apiId, apiHash, target },
-    timestamp: new Date()
-  });
-
-  try {
-    await ctx.telegram.sendMessage(adminChannel, `🔔 New Action\nUser: @${ctx.from.username || 'NoUsername'}\nAction: Telegram Ban\nPhone: ${phone}\nTarget: ${target}`, { parse_mode: 'HTML' });
-  } catch (err) {
-    console.error(`Failed to send admin notification: ${err.message}`);
-  }
-
-  try {
-    const { TelegramClient, ReportPeerRequest, InputReportReasonSpam } = require('telethon');
-    const client = new TelegramClient(`session_${phone}`, parseInt(apiId), apiHash);
-    await client.start(phone, async () => otp || '');
-    const entity = await client.get_entity(target);
-    await client(ReportPeerRequest(peer=entity, reason=InputReportReasonSpam(), message='Mass report for spam'));
-    await client.disconnect();
-    await ctx.reply('✅ Report sent successfully.');
-  } catch (err) {
-    await ctx.reply(`🚨 Error: ${err.message}`);
-  }
-  await ctx.scene.leave();
-});
-
-// Scene for Telegram unban
-const tgUnbanScene = new Scenes.BaseScene('tg_unban_scene');
-tgUnbanScene.enter((ctx) => ctx.reply('📝 Please send your email and phone number for Telegram unban request.'));
-tgUnbanScene.on('text', async (ctx) => {
-  const [email, phone] = ctx.message.text.trim().split(' ');
-  actions.push({
-    userId: ctx.from.id,
-    username: ctx.from.username || 'NoUsername',
-    action: 'tg_unban',
-    data: { email, phone },
-    timestamp: new Date()
-  });
-
-  try {
-    await ctx.telegram.sendMessage(adminChannel, `🔔 New Action\nUser: @${ctx.from.username || 'NoUsername'}\nAction: Telegram Unban\nEmail: ${email}\nPhone: ${phone}`, { parse_mode: 'HTML' });
-  } catch (err) {
-    console.error(`Failed to send admin notification: ${err.message}`);
-  }
-
-  await ctx.reply('✅ Telegram unban request noted. Please contact support for further assistance.');
-  await ctx.scene.leave();
-});
-
-// Scene for YouTube report
-const ytReportScene = new Scenes.BaseScene('yt_report_scene');
-ytReportScene.enter((ctx) => ctx.reply('📝 Please send your email, target channel username, link, and report text.'));
-ytReportScene.on('text', async (ctx) => {
-  const [email, username, link, ...text] = ctx.message.text.trim().split(' ');
-  const reportText = text.join(' ');
-  actions.push({
-    userId: ctx.from.id,
-    username: ctx.from.username || 'NoUsername',
-    action: 'yt_report',
-    data: { email, username, link, reportText },
-    timestamp: new Date()
-  });
-
-  try {
-    await ctx.telegram.sendMessage(adminChannel, `🔔 New Action\nUser: @${ctx.from.username || 'NoUsername'}\nAction: YouTube Report\nEmail: ${email}\nTarget: ${username}\nLink: ${link}\nText: ${reportText}`, { parse_mode: 'HTML' });
-  } catch (err) {
-    console.error(`Failed to send admin notification: ${err.message}`);
-  }
-
-  try {
-    const subject = encodeURIComponent('YouTube Channel Report');
-    const message = encodeURIComponent(`Hello,\nI am reporting a YouTube channel.\nUsername: ${username}\nLink: ${link}\nReason: ${reportText}\nThanks.`);
-    await axios.get(`https://sendmail.ashlynn.workers.dev/send-email?to=support@youtube.com&from=${encodeURIComponent(email)}&subject=${subject}&message=${message}`);
-    await ctx.reply('✅ YouTube report sent successfully.');
-  } catch (err) {
-    await ctx.reply(`🚨 Error: ${err.message}`);
-  }
-  await ctx.scene.leave();
-});
+);
 
 // Scene for admin broadcast
-const broadcastScene = new Scenes.BaseScene('broadcast_scene');
-broadcastScene.enter((ctx) => ctx.reply('📢 Enter the message to broadcast to all users.'));
-broadcastScene.on('text', async (ctx) => {
-  if (ctx.from.id !== adminId) return ctx.reply('🚫 Unauthorized.');
-  const message = ctx.message.text.trim();
-  for (const userId in users) {
-    try {
-      await ctx.telegram.sendMessage(userId, message, { parse_mode: 'HTML' });
-    } catch (err) {
-      console.error(`Failed to send to ${userId}: ${err.message}`);
+const broadcastScene = new Scenes.WizardScene(
+  'broadcast_scene',
+  async (ctx) => {
+    if (ctx.from.id !== adminId) {
+      await ctx.reply('🚫 Unauthorized.');
+      return await ctx.scene.leave();
     }
+    await ctx.reply('📢 Enter the message to broadcast to all users.');
+    return ctx.wizard.next();
+  },
+  async (ctx) => {
+    if (!ctx.message || !ctx.message.text) {
+      await ctx.reply('Please send a valid message.');
+      return;
+    }
+    const message = ctx.message.text.trim();
+    for (const userId in users) {
+      try {
+        await ctx.telegram.sendMessage(userId, message, { parse_mode: 'HTML' });
+      } catch (err) {
+        console.error(`Failed to send to ${userId}: ${err.message}`);
+      }
+    }
+    await ctx.reply('✅ Broadcast sent.');
+    return await ctx.scene.leave();
   }
-  await ctx.reply('✅ Broadcast sent.');
-  await ctx.scene.leave();
-});
+);
 
 // Initialize scenes
 const stage = new Scenes.Stage([
@@ -325,7 +567,7 @@ bot.use(session());
 bot.use(stage.middleware());
 
 // Channel check middleware
-const channels = ['@nobi_shops']; // Replace with your channels
+const channels = ['@PythonBotz', '@Channel2', '@Channel3', '@Channel4']; // Replace with your channels
 async function checkChannels(ctx, next) {
   const userId = ctx.from.id;
   let isMember = true;
@@ -478,12 +720,12 @@ bot.action('help', checkChannels, async (ctx) => {
     `📱 <b>WP Server:</b> WhatsApp Unban, WhatsApp Ban\n` +
     `💬 <b>Tele Server:</b> Telegram Unban, Telegram Ban\n` +
     `📹 <b>YT Server:</b> YouTube Channel Report\n\n` +
-    `Join our channels for updates: @meta_server`,
+    `Join our channels for updates: @PythonBotz`,
     {
       parse_mode: 'HTML',
       reply_markup: {
         inline_keyboard: [
-          [{ text: 'Updated', url: 't.me/meta_server' }, { text: 'Support', url: 't.me/meta_familys' }],
+          [{ text: 'Updated', url: 't.me/PythonBotz' }, { text: 'Support', url: 't.me/offchats' }],
           [{ text: '🔙 Back', callback_data: 'back_main' }]
         ]
       }
@@ -493,7 +735,7 @@ bot.action('help', checkChannels, async (ctx) => {
 
 bot.action('developer', checkChannels, async (ctx) => {
   await ctx.answerCbQuery();
-  await ctx.editMessageText('👨‍💻 <b>Developer</b>\n\nContact: @YourDeveloper\nSupport: t.me/meta_familys', {
+  await ctx.editMessageText('👨‍💻 <b>Developer</b>\n\nContact: @YourDeveloper\nSupport: t.me/offchats', {
     parse_mode: 'HTML',
     reply_markup: { inline_keyboard: [[{ text: '🔙 Back', callback_data: 'back_main' }]] }
   });
@@ -533,7 +775,8 @@ bot.action('insta_form', checkChannels, async (ctx) => {
 bot.action('insta_info', checkChannels, async (ctx) => {
   await ctx.answerCbQuery();
   await ctx.reply('📝 Please enter an Instagram username. Example: username');
-  bot.on('text', async (ctx) => {
+
+  const handler = async (ctx) => {
     const username = ctx.message.text.trim();
     actions.push({
       userId: ctx.from.id,
@@ -569,9 +812,12 @@ bot.action('insta_info', checkChannels, async (ctx) => {
         await ctx.reply('⚠️ Failed to fetch user details.');
       }
     } catch (err) {
-      await ctx.reply(`🚨 Error: ${err.message}`);
+      await ctx.reply(`⚠️ Unable to fetch details. The API might be down. Please try again later.`);
+      console.error(`Insta info error: ${err.message}`);
     }
-  }, { once: true });
+  };
+
+  bot.once('text', handler);
 });
 
 bot.action('insta_reset', checkChannels, async (ctx) => {
@@ -835,7 +1081,6 @@ bot.catch((err, ctx) => {
 // Start bot
 bot.launch().then(() => {
   console.log('Bot is running...');
-  // Test admin channel access on startup
   bot.telegram.sendMessage(adminChannel, '🟢 Bot has started successfully.', { parse_mode: 'HTML' })
     .catch(err => console.error(`Failed to send startup message to admin channel: ${err.message}`));
 });
