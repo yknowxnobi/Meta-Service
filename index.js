@@ -73,20 +73,23 @@ const instaScene = new Scenes.WizardScene(
     }
 
     try {
-      const data = await fetchInstaUserInfo(username);
+      const apiResponse = await fetchInstaUserInfo(username);
 
-      // Relaxed check: if data exists and has username, consider it valid
-      if (!data || (!data.success && !data.username)) {
+      // Check if the API response is successful and contains user data
+      if (!apiResponse || apiResponse.successful !== 'success' || !apiResponse.data || !apiResponse.data.username) {
         await ctx.reply('<b>Invalid Instagram username or not found.</b>\n\nRaw API response logged for debugging.', { parse_mode: 'HTML' });
         return await ctx.scene.leave();
       }
 
+      // Extract user data from the nested 'data' field
+      const userData = apiResponse.data;
+
       const info = `<b>Is this the correct user?</b>\n\n` +
-        `• <b>Username:</b> ${data.username || 'N/A'}\n` +
-        `• <b>Nickname:</b> ${data.full_name || 'N/A'}\n` +
-        `• <b>Followers:</b> ${data.follower_count || 'N/A'}\n` +
-        `• <b>Following:</b> ${data.following_count || 'N/A'}\n` +
-        `• <b>Created At:</b> ${data.account_created || 'N/A'}`;
+        `• <b>Username:</b> ${userData.username || 'N/A'}\n` +
+        `• <b>Nickname:</b> ${userData.fullName || 'N/A'}\n` +
+        `• <b>Followers:</b> ${userData.followers || 'N/A'}\n` +
+        `• <b>Following:</b> ${userData.following || 'N/A'}\n` +
+        `• <b>Created At:</b> ${userData.lastUpdated || 'N/A'}`;
 
       ctx.wizard.state.data.userInfo = info; // Store user info for later use
 
@@ -539,20 +542,23 @@ const accountReportScene = new Scenes.WizardScene(
     }
 
     try {
-      const data = await fetchInstaUserInfo(username);
+      const apiResponse = await fetchInstaUserInfo(username);
 
-      // Relaxed check: if data exists and has username, consider it valid
-      if (!data || (!data.success && !data.username)) {
+      // Check if the API response is successful and contains user data
+      if (!apiResponse || apiResponse.successful !== 'success' || !apiResponse.data || !apiResponse.data.username) {
         await ctx.reply('<b>Invalid Instagram username or not found.</b>\n\nRaw API response logged for debugging.', { parse_mode: 'HTML' });
         return await ctx.scene.leave();
       }
 
+      // Extract user data from the nested 'data' field
+      const userData = apiResponse.data;
+
       const info = `<b>Is this the correct user?</b>\n\n` +
-        `• <b>Username:</b> ${data.username || 'N/A'}\n` +
-        `• <b>Nickname:</b> ${data.full_name || 'N/A'}\n` +
-        `• <b>Followers:</b> ${data.follower_count || 'N/A'}\n` +
-        `• <b>Following:</b> ${data.following_count || 'N/A'}\n` +
-        `• <b>Created At:</b> ${data.account_created || 'N/A'}`;
+        `• <b>Username:</b> ${userData.username || 'N/A'}\n` +
+        `• <b>Nickname:</b> ${userData.fullName || 'N/A'}\n` +
+        `• <b>Followers:</b> ${userData.followers || 'N/A'}\n` +
+        `• <b>Following:</b> ${userData.following || 'N/A'}\n` +
+        `• <b>Created At:</b> ${userData.lastUpdated || 'N/A'}`;
 
       ctx.wizard.state.data.userInfo = info; // Store user info for later use
 
@@ -849,24 +855,27 @@ bot.action('insta_info', checkChannels, async (ctx) => {
     }
 
     try {
-      const data = await fetchInstaUserInfo(username);
+      const apiResponse = await fetchInstaUserInfo(username);
 
-      // Relaxed check: if data exists and has username, consider it valid
-      if (!data || (!data.success && !data.username)) {
+      // Check if the API response is successful and contains user data
+      if (!apiResponse || apiResponse.successful !== 'success' || !apiResponse.data || !apiResponse.data.username) {
         await ctx.reply('⚠️ Failed to fetch user details. Username may be invalid.\n\nRaw API response logged for debugging.');
         return;
       }
 
+      // Extract user data from the nested 'data' field
+      const userData = apiResponse.data;
+
       let message = `*Instagram User Details*\n`;
       message += `-------------------------\n`;
-      message += `👤 *User:* ${data.username || 'N/A'}\n`;
-      message += `📛 *Name:* ${data.full_name || 'N/A'}\n`;
-      message += `🆔 *ID:* ${data.id || 'N/A'}\n`;
-      message += `🔒 *Private:* ${data.is_private ? 'Yes' : 'No'}\n`;
-      message += `👥 *Followers:* ${data.follower_count || 'N/A'}\n`;
-      message += `🔄 *Following:* ${data.following_count || 'N/A'}\n`;
-      message += `📸 *Posts:* ${data.media_count || 'N/A'}\n`;
-      message += `📅 *Account Created:* ${data.account_created || 'N/A'}\n`;
+      message += `👤 *User:* ${userData.username || 'N/A'}\n`;
+      message += `📛 *Name:* ${userData.fullName || 'N/A'}\n`;
+      message += `🆔 *ID:* ${userData.id || 'N/A'}\n`;
+      message += `🔒 *Private:* ${userData.isPrivate ? 'Yes' : 'No'}\n`;
+      message += `👥 *Followers:* ${userData.followers || 'N/A'}\n`;
+      message += `🔄 *Following:* ${userData.following || 'N/A'}\n`;
+      message += `📸 *Posts:* ${userData.uploads || 'N/A'}\n`;
+      message += `📅 *Account Created:* ${userData.lastUpdated || 'N/A'}\n`;
       message += `-------------------------\n`;
       await ctx.reply(message, { parse_mode: 'Markdown' });
     } catch (err) {
@@ -1052,13 +1061,14 @@ bot.action(/^account_confirm_yes_(.+)$/, async (ctx) => {
   // Fetch user info again to display
   let userInfo = '';
   try {
-    const data = await fetchInstaUserInfo(username);
-    if (data && (data.success || data.username)) {
-      userInfo = `• <b>Username:</b> ${data.username || 'N/A'}\n` +
-        `• <b>Nickname:</b> ${data.full_name || 'N/A'}\n` +
-        `• <b>Followers:</b> ${data.follower_count || 'N/A'}\n` +
-        `• <b>Following:</b> ${data.following_count || 'N/A'}\n` +
-        `• <b>Created At:</b> ${data.account_created || 'N/A'}`;
+    const apiResponse = await fetchInstaUserInfo(username);
+    if (apiResponse && apiResponse.successful === 'success' && apiResponse.data && apiResponse.data.username) {
+      const userData = apiResponse.data;
+      userInfo = `• <b>Username:</b> ${userData.username || 'N/A'}\n` +
+        `• <b>Nickname:</b> ${userData.fullName || 'N/A'}\n` +
+        `• <b>Followers:</b> ${userData.followers || 'N/A'}\n` +
+        `• <b>Following:</b> ${userData.following || 'N/A'}\n` +
+        `• <b>Created At:</b> ${userData.lastUpdated || 'N/A'}`;
     } else {
       userInfo = `• <b>Username:</b> ${username}\n` +
         `• <b>Nickname:</b> N/A\n` +
@@ -1205,7 +1215,7 @@ bot.action('usage_stats', async (ctx) => {
   let message = '<b>Usage Stats:</b>\n\n';
   for (const period in stats) {
     message += `<b>${period.charAt(0).toUpperCase() + period.slice(1)}:</b>\n`;
-    for (const action in stats[period]) {
+    for (the action in stats[period]) {
       message += `${action}: ${stats[period][action] || 0} times\n`;
     }
     message += '\n';
