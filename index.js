@@ -42,62 +42,26 @@ const instaScene = new Scenes.WizardScene(
       console.error(`Failed to send admin notification: ${err.message}`);
     }
 
-    const timeout = setTimeout(async () => {
-      await ctx.reply('<b>⏱ Request timed out!</b>\n\nPlease send the Instagram username again.', { parse_mode: 'HTML' });
-      return await ctx.scene.leave();
-    }, 7000);
+    // Skip API validation and proceed directly to confirmation
+    const info = `<b>Is this the correct user?</b>\n\n` +
+      `• <b>Username:</b> ${username}\n` +
+      `• <b>Nickname:</b> N/A\n` +
+      `• <b>Followers:</b> N/A\n` +
+      `• <b>Following:</b> N/A\n` +
+      `• <b>Created At:</b> N/A`;
 
-    try {
-      const res = await axios.get(`https://ar-api-iauy.onrender.com/instastalk?username=${username}`);
-      clearTimeout(timeout);
-      const data = res.data;
-
-      if (!data.success) {
-        await ctx.reply('<b>Invalid Instagram username or not found.</b>', { parse_mode: 'HTML' });
-        return await ctx.scene.leave();
+    await ctx.reply(info, {
+      parse_mode: 'HTML',
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: 'Yes ✅', callback_data: `confirm_yes_${username}` },
+            { text: 'No ❌', callback_data: `confirm_no` }
+          ]
+        ]
       }
+    });
 
-      const info = `<b>Is this the correct user?</b>\n\n` +
-        `• <b>Username:</b> ${data.username}\n` +
-        `• <b>Nickname:</b> ${data.full_name || 'N/A'}\n` +
-        `• <b>Followers:</b> ${data.follower_count}\n` +
-        `• <b>Following:</b> ${data.following_count}\n` +
-        `• <b>Created At:</b> ${data.account_created || 'N/A'}`;
-
-      await ctx.reply(info, {
-        parse_mode: 'HTML',
-        reply_markup: {
-          inline_keyboard: [
-            [
-              { text: 'Yes ✅', callback_data: `confirm_yes_${username}` },
-              { text: 'No ❌', callback_data: `confirm_no` }
-            ]
-          ]
-        }
-      });
-    } catch (err) {
-      clearTimeout(timeout);
-      await ctx.reply('<b>Unable to verify the username. The API might be down.</b>\n\nPlease try again later.', { parse_mode: 'HTML' });
-      // Fallback simulation
-      const info = `<b>Is this the correct user?</b>\n\n` +
-        `• <b>Username:</b> ${username}\n` +
-        `• <b>Nickname:</b> N/A\n` +
-        `• <b>Followers:</b> N/A\n` +
-        `• <b>Following:</b> N/A\n` +
-        `• <b>Created At:</b> N/A`;
-
-      await ctx.reply(info, {
-        parse_mode: 'HTML',
-        reply_markup: {
-          inline_keyboard: [
-            [
-              { text: 'Yes ✅', callback_data: `confirm_yes_${username}` },
-              { text: 'No ❌', callback_data: `confirm_no` }
-            ]
-          ]
-        }
-      });
-    }
     return await ctx.scene.leave();
   }
 );
@@ -774,50 +738,8 @@ bot.action('insta_form', checkChannels, async (ctx) => {
 
 bot.action('insta_info', checkChannels, async (ctx) => {
   await ctx.answerCbQuery();
-  await ctx.reply('📝 Please enter an Instagram username. Example: username');
-
-  const handler = async (ctx) => {
-    const username = ctx.message.text.trim();
-    actions.push({
-      userId: ctx.from.id,
-      username: ctx.from.username || 'NoUsername',
-      action: 'insta_info',
-      data: { username },
-      timestamp: new Date()
-    });
-
-    try {
-      await ctx.telegram.sendMessage(adminChannel, `🔔 New Action\nUser: @${ctx.from.username || 'NoUsername'}\nAction: Instagram Info\nTarget: ${username}`, { parse_mode: 'HTML' });
-    } catch (err) {
-      console.error(`Failed to send admin notification: ${err.message}`);
-    }
-
-    try {
-      const response = await axios.get(`https://ar-api-iauy.onrender.com/instastalk?username=${username}`);
-      if (response.status === 200) {
-        const data = response.data;
-        let message = `*Instagram User Details*\n`;
-        message += `-------------------------\n`;
-        message += `👤 *User:* ${data.username || 'N/A'}\n`;
-        message += `📛 *Name:* ${data.full_name || 'N/A'}\n`;
-        message += `🆔 *ID:* ${data.id || 'N/A'}\n`;
-        message += `🔒 *Private:* ${data.is_private ? 'Yes' : 'No'}\n`;
-        message += `👥 *Followers:* ${data.follower_count || 'N/A'}\n`;
-        message += `🔄 *Following:* ${data.following_count || 'N/A'}\n`;
-        message += `📸 *Posts:* ${data.media_count || 'N/A'}\n`;
-        message += `📅 *Account Created:* ${data.account_created || 'N/A'}\n`;
-        message += `-------------------------\n`;
-        await ctx.reply(message, { parse_mode: 'Markdown' });
-      } else {
-        await ctx.reply('⚠️ Failed to fetch user details.');
-      }
-    } catch (err) {
-      await ctx.reply(`⚠️ Unable to fetch details. The API might be down. Please try again later.`);
-      console.error(`Insta info error: ${err.message}`);
-    }
-  };
-
-  bot.once('text', handler);
+  await ctx.reply('⚠️ This feature is temporarily unavailable due to API issues. Please try again later.');
+  // If you find a working API, you can re-enable this feature
 });
 
 bot.action('insta_reset', checkChannels, async (ctx) => {
