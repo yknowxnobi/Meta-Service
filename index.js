@@ -628,7 +628,7 @@ bot.use(session());
 bot.use(stage.middleware());
 
 // Channel check middleware
-const channels = ['@nobi_shops']; // Replace with your channels
+const channels = ['@nobi_shops]; // Replace with your channels
 async function checkChannels(ctx, next) {
   const userId = ctx.from.id;
   let isMember = true;
@@ -1215,7 +1215,7 @@ bot.action('usage_stats', async (ctx) => {
   let message = '<b>Usage Stats:</b>\n\n';
   for (const period in stats) {
     message += `<b>${period.charAt(0).toUpperCase() + period.slice(1)}:</b>\n`;
-    for (the action in stats[period]) {
+    for (const action in stats[period]) {
       message += `${action}: ${stats[period][action] || 0} times\n`;
     }
     message += '\n';
